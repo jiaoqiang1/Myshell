@@ -23,3 +23,39 @@ Linux的M132 x.xx.x＃1 SMP周二6月10日〇时45分23秒CEST 2014 x86_64的x86
 sudo易于得到净化Linux的头-3.13.0-24 Linux的头-3.13.0-24-通用的linux-image-3.13.0-24泛型
 sudo易于得到净化的linux-image-EXTRA-3.13.0-24泛型 
 替换3.13.0-24你要卸载的版本（或按Tab键键列出已安装的）。因为没有第二个命令可能会引发错误的linux-image-额外的一些内核。
+apt-get升级， 难度☆
+Ubuntu的LTS版本都会提供新版本的内核， 而不是像RedHat那样把新内核的代码提取出来放到当前发布的内核中保持主版本号不变， Ubuntu可能是没有那么大人力物力财力？好吧， 闲话少说， 以14.04为例， 首先我们来看看源列表中存在的可安装内核(LTS支持)：
+
+$ apt-cache search linux-generic-lts
+linux-generic-lts-quantal - Generic Linux kernel image and headers
+linux-generic-lts-quantal-eol-upgrade - Complete Generic Linux kernel and headers
+linux-generic-lts-raring - Generic Linux kernel image and headers
+linux-generic-lts-raring-eol-upgrade - Complete Generic Linux kernel and headers
+linux-generic-lts-saucy - Generic Linux kernel image and headers
+linux-generic-lts-saucy-eol-upgrade - Complete Generic Linux kernel and headers
+linux-generic-lts-trusty - Generic Linux kernel image and headers
+linux-generic-lts-utopic - Complete Generic Linux kernel and headers
+看最下面， 哦， 目前除了随14.04发布的3.13版本的内核还可以选择安装随utopic发布的3.16版本的内核(更低版本的内核我就不说啦， 嗯， 这里是讲升级内核的嘛)， 所以如果想安装3.16的内核就执行
+
+sudo apt-get install linux-generic-lts-utopic
+好了， 坐等完成， 重启以后就是了。
+
+2, 自行下载安装， 难度☆☆
+Ubuntu官方发布到源里的内核优点就是有安全更新( sudo apt-get dist-upgrade )， 缺点是总不是最新的， 好吧， 我想体验一下最新内核！
+
+首先访问 Ubuntu每日内核更新的站点 ， 下载三个包：
+
+mkdir tmp_kernel
+cd tmp_kernel
+
+# 一个是linux-headers-xxxxx_amd64.deb结构命名的， 如果你是32位机器就选linux-headers-xxxxx_i386.deb， 下同
+wget http://kernel.ubuntu.com/~kernel-ppa/mainline/daily/current/linux-headers-3.19.0-999-generic_3.19.0-999.201501100206_amd64.deb
+# 这个是 linux-headers-xxxxx_all.deb结构命名的
+wget http://kernel.ubuntu.com/~kernel-ppa/mainline/daily/current/linux-headers-3.19.0-999_3.19.0-999.201501100206_all.deb
+# 这个是linux-image-xxxxx-_amd64.deb结构命名的
+wget http://kernel.ubuntu.com/~kernel-ppa/mainline/daily/current/linux-image-3.19.0-999-generic_3.19.0-999.201501100206_amd64.deb
+ 
+
+你可能还看到了 * -lowlatency- * 结构命名的内核， 说实话我没用过， 可以 看这里 , 大概是像录音设备之类的需要这种低延迟的内核？这个内核更费电， 对于我们笔记本或台式机还是用不着的。
+
+下载过来以后执行 dpkg -i *.deb (你要保证该目录下没有其他.deb， 要不然就一起被安装了), 再执行 sudo update-grub , 重启就可以了。
