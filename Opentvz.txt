@@ -1,0 +1,109 @@
+编辑：
+
+
+$ sudo vim /etc/apt/sources.list.d/openvz-rhel6.list
+1
+$ sudo vim /etc/apt/sources.list.d/openvz-rhel6.list
+添加如下内容：
+
+
+deb http://download.openvz.org/debian wheezy main
+# deb http://download.openvz.org/debian wheezy-test main
+1
+2
+deb http://download.openvz.org/debian wheezy main
+# deb http://download.openvz.org/debian wheezy-test main
+导入OpenVZ GPG key：
+
+
+$ wget http://ftp.openvz.org/debian/archive.key
+1
+$ wget http://ftp.openvz.org/debian/archive.key
+
+$ sudo apt-key add archive.key
+1
+$ sudo apt-key add archive.key
+更新：
+
+
+$ sudo apt-get update
+1
+$ sudo apt-get update
+安装OpenVZ kernel
+
+对于64位机器：
+
+
+$ sudo apt-get install linux-image-openvz-amd64
+1
+$ sudo apt-get install linux-image-openvz-amd64
+对于32位机器：
+
+
+$ sudo apt-get install linux-image-openvz-686
+1
+$ sudo apt-get install linux-image-openvz-686
+设置kernel参数
+
+在进入vz kernel之前，在sysctl.conf中添加内核参数：
+
+
+$ sudo vim /etc/sysctl.conf
+1
+$ sudo vim /etc/sysctl.conf
+添加：
+
+
+# On Hardware Node we generally need
+# packet forwarding enabled and proxy arp disabled
+net.ipv4.ip_forward = 1
+net.ipv6.conf.default.forwarding = 1
+net.ipv6.conf.all.forwarding = 1
+net.ipv4.conf.default.proxy_arp = 0
+# Enables source route verification
+net.ipv4.conf.all.rp_filter = 1
+# Enables the magic-sysrq key
+kernel.sysrq = 1
+# We do not want all our interfaces to send redirects
+net.ipv4.conf.default.send_redirects = 1
+net.ipv4.conf.all.send_redirects = 0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+# On Hardware Node we generally need
+# packet forwarding enabled and proxy arp disabled
+net.ipv4.ip_forward = 1
+net.ipv6.conf.default.forwarding = 1
+net.ipv6.conf.all.forwarding = 1
+net.ipv4.conf.default.proxy_arp = 0
+# Enables source route verification
+net.ipv4.conf.all.rp_filter = 1
+# Enables the magic-sysrq key
+kernel.sysrq = 1
+# We do not want all our interfaces to send redirects
+net.ipv4.conf.default.send_redirects = 1
+net.ipv4.conf.all.send_redirects = 0
+安装OpenVz使用统计工具
+
+下面命令安装的是统计OpenVz使用的工具，这些工具非常有用：
+
+
+$ sudo apt-get install vzctl vzquota ploop vzstats
+1
+$ sudo apt-get install vzctl vzquota ploop vzstats
+到此为止，OpenVz安装完成。
+
+重启进入OpenVZ内核，它在启动菜单的Advanced options里：
+
+Screen Shot 2016-03-07 at 17.58.14
+

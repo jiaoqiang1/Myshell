@@ -1,0 +1,93 @@
+如前面所属，在Debian7 上需要专门安装OpenVZ 提供的内核镜像才可以完整支持OpenVZ，方法如下：
+
+1.1 添加源并更新（下文操作都需要root 权限）
+
+`# cat << EOF > /etc/apt/sources.list.d/openvz.list
+ deb http://download.openvz.org/debian wheezy main
+ deb http://download.openvz.org/debian wheezy-test main
+ EOF
+ # apt-get update`
+1.2 安装内核镜像
+
+`# apt-get install linux-image-openvz-amd64
+ # apt-get install linux-image-openvz-686    (如果您仍然使用32位系统)`
+2. 配置sysctl 以及安装相关工具
+
+OpenVZ 内核镜像安装完毕，在重启之前还需要如下配置
+
+2.1 有一些内核参数需要配置以保证OpenVZ 的正常运行，配置文件为”/etc/sysctl.conf” 
+
+# On Hardware Node we generally need 
+# packet forwarding enabled and proxy arp disabled 
+net.ipv4.ip_forward = 1 
+net.ipv6.conf.default.forwarding = 1 
+net.ipv6.conf.all.forwarding = 1 
+net.ipv4.conf.default.proxy_arp = 0 
+# Enables source route verification 
+net.ipv4.conf.all.rp_filter = 1 
+# Enables the magic-sysrq key 
+kernel.sysrq = 1 
+# We do not want all our interfaces to send redirects 
+net.ipv4.conf.default.send_redirects = 1 
+net.ipv4.conf.all.send_redirects = 0
+
+2.2 需要安装一些用户空间的工具
+
+# apt-get install vzctl vzquota ploop vzstats
+
+3. 重启至OpenVZ 内核
+
+配置以及相关软件安装完毕，需要重启内核至OpenVZ 的内核
+
+简单上手
+
+对于这样一个可以提供完整系统运行环境的Linux 容器，当然得把玩把玩，快快坐好体验一下吧。更多参考[2][4]
+
+1. 下载预先准备的模板(也可以称作镜像)
+
+1.1 从官方网站下载你需要的模板[5][6]
+
+1.2 将下载好的模板移动到需要的路径下
+
+# mv ubuntu-14.04-x86.tar.gz /var/lib/vz/template/cache/
+
+2. 创建以及配置容器信息
+
+# vzctl create CTID --ostemplate osname 
+# vzctl set CTID --hostname test --save 
+# vzctl set CTID --ipadd a.b.c.d --save 
+# vzctl set CTID --nameserver a.b.c.d --save
+
+如：
+
+# vzctl create 111 --ostemplate ubuntu-14.04-x86 
+# vzctl set 111 --hostname ubuntu --save 
+# vzctl set 111 --ipadd 192.168.2.233 --save 
+# vzctl set 111 --nameserver 192.168.2.1 --save
+
+3. 开始运行以及使用
+
+# vzctl start CTID 
+# vzctl exec CTID ps ax # Now the container is running! 
+# vzctl enter CTID 
+entered into container CTID 
+[container]# ... 
+[container]# exit 
+exited from container VEID 
+# vzctl stop CTID 
+# vzctl destroy CTID
+
+如：
+
+# vzctl start 111 
+# vzctl enter 111 
+[container]# do something (default is root) 
+[container]# exit 
+# vzctl stop 111
+[1] https://wiki.openvz.org/Installation_on_Debian 
+http://openvz.livejournal.com/45345.html 
+[2] https://wiki.openvz.org/Basic_operations_in_OpenVZ_environment 
+[3] http://download.openvz.org/doc/openvz-intro.pdf 
+[4] http://download.openvz.org/doc/OpenVZ-Users-Guide.pdf 
+[5] http://download.openvz.org/template/precreated/ 
+[6] http://openvz.org/Download/template/precreated
