@@ -1,0 +1,68 @@
+配置服务器ip地址200以后，虚拟机，两台机器文件同步
+
+rsync 使用   ；  使用 ； nginx的日志分别用rsync rsyslog同步，做压力对比测试；
+openvz , 
+# cat < /etc/apt/sources.list.d/openvz-rhel6.list
+> deb http://download.openvz.org/debian 喘息主
+> # deb http://download.openvz.org/debian 喘息性测试主要
+> EOF
+ wget http://ftp.openvz.org/debian/archive.key
+# 易键添加 archive.key
+apt-key add archive.key
+
+apt-get install linux linux-image-openvz-amd64
+生成的 grub 配置文件 …
+发现 linux 映像: /boot/vmlinuz-3.19.0-15-generic
+发现的 initrd 映像: /boot/initrd.img-3.19.0-15-generic
+发现 linux 映像: /boot/vmlinuz-2.6.32-openvz-042stab111.11 amd64
+发现的 initrd 映像: /boot/initrd.img-2.6.32-openvz-042stab111.11 amd64
+发现 memtest86 + 图像: /启动/memtest86 +.elf
+发现 memtest86 + 图像: /启动/memtest86 +.bin
+完成
+设置 linux-图像-openvz-amd64 (042stab111.11) …
+# vim /etc/sysctl.conf
+net.ipv4.ip_forward = 1
+net.ipv6.conf.default.forwarding = 1
+net.ipv6.conf.all.forwarding = 1
+net.ipv4.conf.default.proxy_arp = 0
+# 启用源路由验证
+net.ipv4.conf.all.rp_filter = 1
+# 启用-magicsysrq 键
+kernel.sysrq = 1
+# 我们不希望我们的所有接口发送重定向消息
+net.ipv4.conf.default.send_redirects = 1
+net.ipv4.conf.all.send_redirects = 0
+保存所做的更改后关闭文件，请运行以下命令来应用 sysctl 更改.
+# sysctl-p
+安装 OpenVZ 工具
+apt-get install vzctl vzquota ploop vzstat
+OpenVZ 的默认配置文件可以在以下位置找到.
+
+# 六、 /etc/vz/vz.conf
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 虚拟机
+ursync+inotify
+
+
+
+rsync:同步更新两台电脑档案目录
+（透过rsh,ssh将档案镜像做备份至远端服务器。）
+将np资料夹底下的所有东西复制至tmp资料夹rsync -av np/ tmp/
+如：将远端机器的etc资料夹备份至此机器的tmp资料夹rsync -av -e ssh user@host:/etc tmp ps. 两端机器必须都要支援rsync
+/etc/rsyncd.conf 为rsync设定档
+/etc/rsyncd.secrets为密码档
+sudo rpm -qa | grep 'rsync' （检查是否安装rsync）
