@@ -1,0 +1,11 @@
+配置服务器ip地址200以后，虚拟机，两台机器文件同步
+
+rsync 使用   ；  使用 ； nginx的日志分别用rsync rsyslog同步，做压力对比测试；openvz , lxc 虚拟机
+ursync+inotify
+rsync:同步更新两台电脑档案目录
+（透过rsh,ssh将档案镜像做备份至远端服务器。）
+将np资料夹底下的所有东西复制至tmp资料夹rsync -av np/ tmp/
+如：将远端机器的etc资料夹备份至此机器的tmp资料夹rsync -av -e ssh user@host:/etc tmp ps. 两端机器必须都要支援rsync
+/etc/rsyncd.conf 为rsync设定档
+/etc/rsyncd.secrets为密码档
+sudo rpm -qa | grep 'rsync' （检查是否安装rsync）

@@ -1,0 +1,50 @@
+rsyncd.conf文件内容：
+# Minimal configuration file for rsync daemon
+# See rsync(1) and rsyncd.conf(5) man pages for help
+ 
+# This line is required by the /etc/init.d/rsyncd script
+pid file = /var/run/rsyncd.pid   （将进程写到/var/run/rsyncd.pid）
+port = 873（端口号自己指定）
+address = 192.168.1.171(服务器IP地址) 
+#uid = nobody
+#gid = nobody   
+uid = root   
+gid = root   
+ 
+use chroot = yes 
+read only = no 
+ 
+ 
+#limit access to private LANs
+hosts allow=192.168.1.0/255.255.255.0 10.0.1.0/255.255.255.0 （在您可以指定单个IP，也可以指定整个网段，能提高安全性。格式是ip 与ip 之间、ip和网段之间、网段和网段之间要用空格隔开）
+hosts deny=*
+ 
+max connections = 5（客户端最多连接数；）
+motd file = /etc/rsyncd/rsyncd.motd（motd file 是定义服务器信息的，要自己写 rsyncd.motd 文件内容。当用户登录时会看到这个信息）
+ 
+#This will give you a separate log file
+#log file = /var/log/rsync.log（rsync 服务器的日志）
+ 
+#This will log every file transferred - up to 85,000+ per user, per sync
+#transfer logging = yes（这是传输文件的日志）
+ 
+log format = %t %a %m %f %b
+syslog facility = local3
+timeout = 300
+ 
+[linuxsirhome]   （模块，它为我们提供了一个链接的名字，链接到哪呢，在本模块中，链接到了/home目录；要用[name] 形式）
+path = /home（指定文件目录所在位置，这是必须指定的）
+list=yes（同步数据目录显示做好no）
+ignore errors（忽略IO错误，详细的请查文档）
+auth users = linuxsir（认证用户是linuxsir ，是必须在 服务器上存在的用户）
+secrets file = /etc/rsyncd/rsyncd.secrets （密码存在哪个文件）
+comment = linuxsir home （注释可以自己定义，写什么都行，写点相关的内容就行）
+exclude =   beinan/  samba/（exclude 是排除的意思，也就是说，要把/home目录下的beinan和samba 排除在外； beinan/和samba/目录之间有空格分开 ）  
+ 
+[beinan]
+path = /opt
+list=no
+ignore errors
+comment = optdir   
+auth users = beinan
+secrets file = /etc/rsyncd/rsyncd.secrets

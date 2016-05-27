@@ -1,0 +1,29 @@
+yum install rsync
+sudo apt-get  install  rsync
+rsyncd.conf 是rsync服务器主要配置文件。
+rsyncd.secrets是登录rsync服务器的密码文件。
+rsyncd.motd是定义rysnc 服务器信息的，也就是用户登录信息。
+mkdir /etc/rsyncd
+在/etc目录下创建一个rsyncd的目录，我们用来存放rsyncd.conf 和rsyncd.secrets文件；
+touch /etc/rsyncd/rsyncd.conf(创建rsyncd.conf ，这是rsync服务器的配置文件；)
+touch /etc/rsyncd/rsyncd.secrets(创建rsyncd.secrets ，这是用户密码文件；)
+chmod 600 /etc/rsyncd/rsyncd.secrets(为了密码的安全性，我们把权限设为600)
+touch /etc/rsyncd/rsyncd.motd(创建rsyncd.motd文件，这是定义服务器信息的文件)
+/etc/rsyncd/rsyncd.secrets的内容格式:(
+用户名:密码
+linuxsir:222222
+beinan:333333                       )
+rsyncd.motd的内容为：可以用#注销的（
++++++++++++++++++++++++++++
++ linuxsir.org  rsync  2002-2007 +
++++++++++++++++++++++++++++          ）
+启动rsync服务器：（
+–daemon 是让rsync 以服务器模式运行：
+/usr/bin/rsync --daemon  --config=/etc/rsyncd/rsyncd.conf
+rsync服务器和防火墙：
+Linux 防火墙是用iptables，所以我们至少在服务器端要让你所定义的rsync 服务器端口通过，客户端上也应该让通过。
+iptables -A INPUT -p tcp -m state --state NEW  -m tcp --dport 873 -j ACCEPT
+防火墙是不是打开了 873端口；
+iptables -L
+通过rsync客户端来同步数据
+rsync -avzP linuxsir@linuxsir.org::linuxsirhome   linuxsirhome

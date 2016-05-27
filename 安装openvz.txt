@@ -1,0 +1,85 @@
+1、安装 OpenVZ
+建议为虚拟机（默认是/vz目录）分配一个单独的分区上，并格式化为ext4文件系统。
+下载 openvz.repo 文件到/etc/yum.repos.d/ 目录下
+
+wget -P /etc/yum.repos.d/ https://download.openvz.org/openvz.repo
+导入 OpenVZ GPG key 用于签名 RPM 包
+
+rpm --import http://ftp.openvz.org/RPM-GPG-Key-OpenVZ
+开始安装
+OpenVZ 现已支持 Linux 3.x内核，但目前仍在用着2.6.x的内核。
+
+yum -y install vzkernel
+至此，OpenVZ 就已经安装完毕了。这时候，不能重启机器。
+确认 /etc/sysctl.conf 配置文件中的内容跟下列的一致：
+
+# On Hardware Node we generally need
+# packet forwarding enabled and proxy arp disabled
+net.ipv4.ip_forward = 1
+net.ipv6.conf.default.forwarding = 1
+net.ipv6.conf.all.forwarding = 1
+net.ipv4.conf.default.proxy_arp = 0
+
+# Enables source route verification
+net.ipv4.conf.all.rp_filter = 1
+
+# Enables the magic-sysrq key
+kernel.sysrq = 1
+
+# We do not want all our interfaces to send redirects
+net.ipv4.conf.default.send_redirects = 1
+net.ipv4.conf.all.send_redirects = 0
+同时，禁止SELinux，运行命令：
+
+echo "SELINUX=disabled" > /etc/sysconfig/selinux
+还需要安装一些额外的软件包：vzctl，用于管理虚拟机；vzquota，用于控制硬盘容量分配；ploop，用于 OpenVZ 的文件系统管理。
+执行以下命令：
+
+yum -y install vzctl vzquota ploop
+到这一步完成后，重启机器。系统会自动加载 OpenVZ 内核（默认选择），启动完成后，检查是否正确安装内核：
+
+uname -a
+会输出类似以下结果：
+
+Linux hostname 2.6.32-042stab081.8 #1 SMP Mon Nov 05 17:50:24 MSK 2013 x86_64 GNU/Linux
+其中字符串“042stab081.8”代表着 OpenVZ 版本号，理应是 OpenVZ 官网上的最新版。
+
+2、创建虚拟机（container）
+创建一个虚拟机并不难，不过在这之前，需先下载 OpenVZ 官网上的一些操作系统的模版放在/vz/template/cache/下，请注意，下载回来的文件以tar.gz结尾，无需解压。
+OpenVZ 官网提供的模版下载地址：
+http://openvz.org/Download/template/cache
+(http://download.openvz.org/template/precreated/ubuntu-14.04-x86.tar.gz)
+
+这些模板包括：CentOS、Debian、Fedora、openSUSE、Ubuntu，都是常见的 Linux 发行版。
+
+创建并启动一个虚拟机，只需运行以下命令：
+
+vzctl create CTID --ostemplate osname
+vzctl set CTID --ipadd a.b.c.d --save
+vzctl set CTID --nameserver a.b.c.d --save
+vzctl start CTID
+这里的 CTID 是一个正整数ID，osname 是系统模版的名称，a.b.c.d是分配的 IP 地址，nameserver 是域名服务器（通常用Google的公共DNS服务器8.8.8.8）。
+
+举例如下：
+
+vzctl create 101 –ostemplate centos-6-x86
+vzctl set 101 –ipadd 192.0.2.1 –save
+vzctl set 101 –nameserver 8.8.8.8 –save
+vzctl start 101
+到这里，一个虚拟机（container）就创建好了。
+
+刷新已创建的虚拟机，执行：
+
+vzctl exec CTID ps ax
+进入虚拟机，执行：
+
+vzctl enter CTID
+退出虚拟机，输入exit即可。
+
+停止虚拟机，执行：
+
+vzctl stop CTID
+删除虚拟机，执行：
+
+vzctl destroy CTID
+对虚拟机的使用资源进行限制，则编辑/etc/vz/conf/CTID.conf即可。每个已创建的虚拟机都会有各自的配置文件。一般默认配置是256MB内存，512MB vSwap，2GB硬盘空间。
