@@ -1,0 +1,25 @@
+删除新的内核，并继续使用旧的，使您的系统容易受到旧内核漏洞
+安装新内核，对于这些修复了
+安装新的内核最简单的方法是从下载kernel.ubuntu.com并使用安装它的dpkg。
+
+首先，选择您想要的版本（最好是最新的非RC之一，乌托邦内核将为14.04工作过），然后下载3个文件：
+
+Linux的头，x.xx.x-XXXXXX-generic_x.xx.x-xxxxxx.xxxxxxxxxxxxx_ 架构的.deb
+Linux的头，x.xx.x-xxxxxx_x.xx.x-xxxxxx.xxxxxxxxxxxx_all.deb
+的linux-image-x.xx.x-XXXXXX-generic_x.xx.x-xxxxxx.xxxxxxxxxxxx_ 架构的.deb
+更换架构与i386的，如果你使用32位的Ubuntu，或者AMD64如果使用64位单（它无关CPU制造商！）。
+
+这些文件移动到不同的目录中，打开终端，CD到该目录，然后运行以下命令：
+
+须藤dpkg -i来* .deb文件
+当dpkg的结束，可以重新启动，并确保您正在运行你已经安装的内核：
+
+-a的uname
+Linux的M132 x.xx.x＃1 SMP周二6月10日〇时45分23秒CEST 2014 x86_64的x86_64的x86_64的GNU / Linux的
+记住，你现在得手动更新的内核，因为软件更新将只安装3.13补丁，内核版本的Ubuntu发布之后永远不会改变。
+
+如果还是不行，请卸载你已经安装了的内核
+
+sudo易于得到净化Linux的头-3.13.0-24 Linux的头-3.13.0-24-通用的linux-image-3.13.0-24泛型
+sudo易于得到净化的linux-image-EXTRA-3.13.0-24泛型 
+替换3.13.0-24你要卸载的版本（或按Tab键键列出已安装的）。因为没有第二个命令可能会引发错误的linux-image-额外的一些内核。
