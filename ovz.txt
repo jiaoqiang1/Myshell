@@ -1,0 +1,187 @@
+penVZ 作为系统级虚拟化的代表，性能还是不错的。Wikipedia 上有这样的介绍：
+
+OpenVZ是基于Linux内核和作业系统的操作系统级虚拟化技术。OpenVZ允许物理服务器运行多个操作系统，被称虚拟专用服务器（VPS，Virtual Private Server）或虚拟环境（VE, Virtual Environment）。
+与VMware这种虚拟机和Xen这种半虚拟化技术相比，OpenVZ的host OS和guest OS都必需是Linux（虽然在不同的虚拟环境里可以用不同的Linux发行版）。但是，OpenVZ声称这样做有性能上的优势。根据OpenVZ网站的说法，使用OpenVZ与使用独立的服务器相比，性能只会有1-3%的损失。
+OpenVZ是SWsoft, Inc.公司开发的专有软件Virtuozzo的基础。OpenVZ的授权为GPLv2。
+OpenVZ由两部分组成，一个经修改过的操作系统核心与及用户工具。
+
+　　但是 Ubuntu 自从 8.04 之后官方就没有再对 OpenVZ 有支持了，因此还是需要自己编译安装。不过这个是在 Xen 之前就搞定了。所以还是在 10.04 上的步骤。
+
+
+安装编译必要工具
+
+　　安装必要的编译中需要使用到的工具
+
+
+$ sudo apt-get install build-essential kernel-package libncurses5-dev fakeroot wget bzip2 module-assistant debhelper git-core git-buildpackage automake autoconf libtool liblockfile-simple-perl cstream liblog-agent-perl ssl-cert exim4
+$ sudo apt-get build-dep linux-image-2.6.32-22-server
+$ sudo m-a prepare
+
+　　修改 kernel-package 为你的计算机中 CPU 核心数。
+
+
+$ sudo kernel-packageconfig
+CoresNumber=$(ArgumentsNumber () { echo $#; }; ArgumentsNumber $(grep "processor" /proc/cpuinfo | cut -f2 -d":"))
+$ echo "CONCURRENCY_LEVEL := $CoresNumber" | sudo tee -a /etc/kernel-pkg.conf
+
+编译内核
+
+　　下载并为内核打上 OpenVZ 的补丁
+
+
+$ cd /usr/src
+$ sudo wget http://archive.ubuntu.com/ubuntu/pool/main/l/linux/linux_2.6.32.orig.tar.gz
+$ sudo wget http://download.openvz.org/kernel/branches/2.6.32/2.6.32-dyomin.1/patches/patch-dyomin.1-combined.gz
+
+　　如果你使用的是 X86，即 32 位的环境，则从这里下载
+
+
+$ sudo wget http://download.openvz.org/kernel/branches/2.6.32/2.6.32-dyomin.1/configs/kernel-2.6.32-i686.config.ovz
+
+　　如果你使用的是 X86 PAE，即 32 位且开启了对大内存的支持，则从这里下载
+
+
+$ sudo wget http://download.openvz.org/kernel/branches/2.6.32/2.6.32-dyomin.1/configs/kernel-2.6.32-i686-PAE.config.ovz
+
+　　如果你使用的是 X86-64，即 64 位的环境，则
+
+
+$ sudo wget http://download.openvz.org/kernel/branches/2.6.32/2.6.32-dyomin.1/configs/kernel-2.6.32-x86_64.config.ovz
+
+　　选择完正确的官方配置之后，就可以开始准备编译内核了
+
+
+$ sudo tar -xpf linux_2.6.32.orig.tar.gz
+$ sudo mv linux-2.6.32 linux-2.6.32-openvz
+$ sudo rm linux
+$ sudo ln -s linux-2.6.32-openvz linux
+$ cd linux
+$ sudo gunzip -dc ../patch-dyomin.1-combined.gz | sudo patch -p1
+$ sudo cp -rf ../kernel-2.6.32-[your_platform].config.ovz .config
+$ sudo make oldconfig
+
+　　这里可能会遇到一些问题，比如
+
+cc -m32 -Wall -Wmissing-declarations -Wmissing-prototypes -O3 -I../../include -I../../arch/x86/include -U_FORTIFY_SOURCE lguest.c -o lguest
+lguest.c:21:25: error: sys/eventfd.h: No such file or directory
+lguest.c:37:18: error: zlib.h: No such file or directory
+
+　　如果你遇到了这个问题，则修改 Documentation/lguest/Makefile 中的
+
+
+all: lguest
+
+clean:
+
+为
+
+all:
+
+clean:
+
+　　安装内核包
+
+
+$ cd ..
+$ ls -l *.deb
+$ sudo dpkg -i linux-image-2.6.32.22-ovz32_1.0_amd64.deb
+$ sudo dpkg -i linux-headers-2.6.32.22-ovz32_1.0_amd64.deb
+
+　　到这里，就基本上完成了对 OpenVZ 的配置安装，下面创建 initramfs
+
+
+$ sudo mkinitramfs -k 2.6.32.22-ovz32 -o /boot/initrd.img-2.6.32.22-ovz32
+$ sudo update-grub
+
+安装 OpenVZ 配置工具
+
+　　这里需要从 git 抓取新的 tools，所以前面的必要编译工具中，我加入了 git
+
+vzctl：
+
+$ cd
+$ sudo git clone git://git.openvz.org/pub/vzctl vzctl
+$ cd vzctl
+$ sudo ./autogen.sh
+$ sudo ./configure --enable-bashcomp --enable-logrotate
+$ sudo make
+$ sudo make install
+$ sudo make install-debian
+
+vzquota：
+
+$ cd
+$ sudo git clone git://git.openvz.org/pub/vzquota vzquota
+$ cd vzquota
+$ sudo make
+$ sudo make install
+
+vzpkg：
+
+$ sudo apt-get install rpm yum alien
+$ cd
+$ sudo git clone git://git.openvz.org/pub/vzpkg vzpkg
+$ cd vzpkg
+$ sudo make install
+
+收尾工作
+
+　　将 OpenVZ 添加到默认启动的服务中去
+
+
+$ sudo update-rc.d vz defaults
+
+　　建立文件链接
+
+
+$ sudo ln -s /var/lib/vz /vz
+
+　　修改 /etc/sysctl.conf 完成最后配置
+
+
+### Hetzner Online AG installimage
+# sysctl config
+#net.ipv4.ip_forward=1
+
+net.ipv4.conf.default.forwarding=1
+net.ipv4.conf.default.proxy_arp = 0
+net.ipv4.ip_forward=1
+
+# Enables source route verification
+net.ipv4.conf.all.rp_filter = 1
+
+# Enables the magic-sysrq key
+kernel.sysrq = 1
+
+# TCP Explict Congestion Notification
+#net.ipv4.tcp_ecn = 0
+
+# we do not want all our interfaces to send redirects
+net.ipv4.conf.default.send_redirects = 1
+net.ipv4.conf.all.send_redirects = 0
+
+　　到此为止，已经完成了 OpenVZ 的配置和安装工作。重启计算机应该就可以了。
+
+
+$ sudo uname -rvo
+$ sudo ps ax | grep vz
+
+2.6.32.22-ovz32 #1 SMP Tue Sep 24 13:07:07 CEST 2010 GNU/Linux
+3890 ? S 0:00 [vzmond]
+4066 pts/0 S+ 0:00 grep –color=auto vz
+
+Posted in: GNU/Linux, Open Source	Tagged: 虚拟化, GNU/Linux, OpenVZ, ubuntu
+2 Comments
+
+lalala
+04/16/2012 at 19:10
+
+无法找到与 linux-image-2.6.32-22-server 对应的源代码包
+
+Reply
+drivel
+04/16/2012 at 23:51
+
+@lalala, 用当前内核版本替换就好
+
+Reply
