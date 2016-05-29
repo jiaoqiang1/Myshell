@@ -21,7 +21,10 @@ $ sudo apt-get install lxc
 
 $ lxc-checkconfig 
 
-安装完 LXC 工具后，就能看到 LXC 自动创建了一块桥接网卡（lxcbr0，可以在 /etc/lxc/default.conf 中设置）。
+安装完 LXC 工具后，就能看到 LXC 自动创建了一块桥接网卡
+$ifconfig lxcbr0
+
+（lxcbr0，可以在 /etc/lxc/default.conf 中设置）。
 
 
 当你创建了 LXC 容器后，它的网口会自动链接到这个桥接网卡上，然后这个容器就能和外部世界通信了。
@@ -98,6 +101,7 @@ $ sudo lxc-clone -o <container-name> -n <new-container-name>
 $ sudo lxc-create -n test-lxc -t ubuntu
 
 lxc-create: symbol lookup error: /usr/lib/x86_64-linux-gnu/liblxc.so.1: undefined symbol: cgmanager_get_pid_cgroup_abs_sync
-错误的原因是你运行了最新的 LXC，但是它所依赖的 libcgmanager 版本较老，两者不兼容。升级下 libcmanager 即可解决问题：
+错误的原因是你运行了最新的 LXC，但是它所依赖的 libcgmanager 版本较老，两者不兼容。升级下 libcmanager 即ifconfig lxcbr0
+可解决问题：
 
 $ sudo apt-get install libcgmanager0 
