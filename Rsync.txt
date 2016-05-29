@@ -111,6 +111,7 @@ zhouda# /usr/bin/rsync -vzrtopg --progress roger@192.168.5.13::linuxsirhome  /tm
 #因为没有指定密码文件，所以需要手动输入主服务器上的设定的密码
 
 输入密码：roger
+tt
 
 roger是指定密码文件中的用户名
 
