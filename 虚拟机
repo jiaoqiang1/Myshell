@@ -1,0 +1,181 @@
+OVZ搭建服务器搭建OpenVZ教程人人都可以分VPS
+2014.8.12 / 服务器相关 / OpenVZ
+（我发现搭建这个资料很少，想做一个视频教程，不过看网站也可以搭建成功。视频教程就麻烦了不过我会发出来的）
+分享过很多VPS信息，都是主机商开设的，那么我们可不可以自己买个服务器开VPS玩呢？我就使用VM虚拟机来做一个教程，简单的实施了这个过程。另外，我使用的是免费的面板
+因为一些功能方面不够完善，是不适合拿来卖的，这点请务必留意。如果只是自用，直接用vzctl命令开设也是非常简单的，但是没有图形化的界面，对于类似没接触这类小白
+还是有少许挑战，所以，今天我记录的这个过程，使用了免费的面板来开设和管理。
+这里说一下我本身也不会搭建·在www.idc886.com 站长帮助下才学会搭建的。我VPS信息一部分是在他这里学习的也是比较好的学习地方
+
+http://openvz.org/Quick_installation#yum_pre-setup 这个是官方教程
+
+准备工作：独立服务器1台(这里我使用了VM虚拟机·VM虚拟机搭建教程我论坛也有自己去搜索) 
+我使用的是CentOS 6.5版本的系统·希望大家不要使用其他系统·出了什么问题·我也不怎么会解决·你懂得
+以root登陆我们的服务器，首先，我们需要安装OpenVZ。
+（注意其实我们也可以登录系统桌面直接操作·或者在winscp工具编辑我所说的文件也可以的）
+第一步 
+1.关闭SELinux
+
+    编辑vim /etc/sysconfig/selinux 修改为：
+    SELINUX=disabled
+    SELINUXTYPE=targeted
+
+
+第二步
+关闭iptables防火墙或者开启防火墙3000端口
+假如您的服务器iptables规则已经做了限定，您可以暂时关闭iptables，或者提前打开3000端口
+
+   iptables -I INPUT -p tcp –dport 3000 -j ACCEPT
+
+    /etc/rc.d/init.d/iptables save
+    /etc/init.d/iptables restart
+或者
+iptables -F 
+清一下防火墙意思是清楚防火墙所有规则吧
+
+
+第三步
+3.开始安装OpenVZ
+
+    cd /etc/yum.repos.d  意思是（跳到这个目录）
+
+    wget http://download.openvz.org/openvz.repo （下载的意思）
+
+    wget http://download.openvz.org/RPM-GPG-Key-OpenVZ  （还是下载的意思）
+
+    rpm –import RPM-GPG-Key-OpenVZ （进口OpenVZ GPG密钥用于签名RPM包 意思是签名RPM包）
+    rpm --import http://ftp.openvz.org/RPM-GPG-Key-OpenVZ     （一样是签名RPM包的意思只不过好像这一条使用不使用没什么关系）
+
+    yum update   （更新系统软件各种工具主要的是OpenVZ依赖的工具）
+  
+    yum install vzkernel （不用我说就是可是安装，反正就是等看到需要Y就Y）
+
+
+第四步 
+4.修改 /etc/sysctl.conf文件 （上面我已经说了如果不会使用命令修改文件可以到桌面或者工具）
+
+vi /etc/sysctl.conf
+
+（留意下面的部分，参照修改，这个是我自己最新的配置其实就是修改1啊0啊之类的也就是几个而已）
+
+# Kernel sysctl configuration file for Red Hat Linux
+#
+# For binary values, 0 is disabled, 1 is enabled.  See sysctl(8) and
+# sysctl.conf(5) for more details.
+
+# Controls IP packet forwarding
+net.ipv4.ip_forward = 1
+
+# Controls source route verification
+net.ipv4.conf.default.rp_filter = 1
+
+# Do not accept source routing
+net.ipv4.conf.default.accept_source_route = 0
+
+# Controls the System Request debugging functionality of the kernel
+kernel.sysrq = 1
+
+# Controls whether core dumps will append the PID to the core filename.
+# Useful for debugging multi-threaded applications.
+kernel.core_uses_pid = 1
+
+# Controls the use of TCP syncookies
+net.ipv4.tcp_syncookies = 1
+
+# Disable netfilter on bridges.
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-arptables = 0
+
+# Controls the default maxmimum size of a mesage queue
+kernel.msgmnb = 65536
+
+# Controls the maximum size of a message, in bytes
+kernel.msgmax = 65536
+
+# Controls the maximum shared segment size, in bytes
+kernel.shmmax = 68719476736
+
+# Controls the maximum number of shared memory segments, in pages
+kernel.shmall = 4294967296
+net.ipv4.conf.default.proxy_arp=0
+net.ipv4.conf.default.send_redirects=1
+net.ipv4.conf.all.send_redirects=0
+
+然后生效：sysctl –p  （你在桌面保存了就不用使用这个命令）
+
+第五步
+
+echo "SELINUX=disabled" > /etc/sysconfig/selinux （第一条命令）
+
+yum install vzctl vzquota ploop （第二条命令这个安装看到Y就按Y里面自动安装8个软件，安装完了重启服务器）
+
+重启服务器 ：reboot  （你懂得）
+
+接下来检查安装成功没
+ 这个是成功的意思
+# chkconfig --list vz    //这里是检查启动列表里是否有OVZ 如果没有就使用下面两条命令了
+# vzlist  　　查看正在运行中的 VE/VPS·其实之类不需要看以后有了vps就可以看
+# uname -r  用这个就可查到是否用的OVZ内核。 
+php探针就能看到是否是 OVZ 内核，
+启动菜单 
+cat  /boot/grub/grub.conf 
+你查一下，看是不是从OVZ内核启动的 
+上面已经安装好了那么下面就开始安装控制面板啦··嘻嘻
+
+
+第六步
+5.安装OpenVZ面板(OpenVZ Web Panel)
+ 安装成功了
+第一条wget  http://174.140.166.28/ai.sh 
+第二条sh ai.sh
+
+第六步
+6.登陆面板及管理
+ 
+安装完成后，使用IP+端口3000登陆，默认管理用户和密码均为admin。
+文章地址：http://bbs.rrcctv.com/thread-18647-1-1.html
+分享到： 新浪微博 腾讯微博 人人网 更多 0
+
+← →
+/ 0 Comment
+
+我们坚信，评论能够拯救世界！
+
+昵称
+ 
+电子邮箱
+ 
+个人主页
+ 发表评论
+/ 标签云
+
+/ 分类
+php相关(3)
+服务器相关(15)
+随笔(9)
+xss(9)
+奇技淫巧(25)
+/ 标签
+从理论上来说 所有网页的风格都是可以完全复制的。 DDOS(php源码) 孤单 台湾人写给号称中国黑客们的文章 XSS跨站脚本攻击 Apinga-XSS X0.1 dedecms爆后台文件技巧 万能密码 渗透discuz!新思路(拖库) 关于黑客的 PHP一句话木马 xss盲打 世界最强突破 获取ASP源码 杀安全狗一句话木马 XSS漏洞发掘 XSS小抄 微软我使用其他系统了 触发XSS的代码 HTML标签 搜​索高级语法 后台目录 解析漏洞 绕过XSS过滤规则 写给现在的黑客 vps服务器 VPS虚拟化 ubuntu安装教程 WDCP控制面板 VPS购买选择 Vhms虚拟主机管理系统 vps搭建AMH 安装win系统 新浪XSS漏洞 骇客最强攻击 杀狗方法 XR写shell 过安全狗技术 mysql写一句话木马 OpenVZ XenServer 开设VPS whmcs 翻墙 PHP后门 教程
+/ 存档
+2015年7月(6)
+2015年6月(1)
+2015年2月(1)
+2015年1月(2)
+2014年12月(2)
+2014年9月(1)
+2014年8月(2)
+2014年6月(7)
+2014年5月(10)
+2014年4月(9)
+2014年3月(5)
+2013年9月(15)
+/ 随机文章
+目前供收录88种触发XSS的代码
+HTML标签 闭合还是不闭合？
+搜​索高级语法（已收！收藏啦）
+入侵碰到无法下手，想不出思路·可以看这里
+解析漏洞总结
+/ 友情链接
+百度
+.
