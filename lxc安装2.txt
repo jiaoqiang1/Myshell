@@ -1,0 +1,134 @@
+LXC安装与使用
+分类：Linux| 发布时间：2014-01-23 22:17:21
+
+LXC简介
+LXC (Linux Containters) 是一种基于内核容器属性的用户空间接口。 通过强大的API和简单的工具，它可以让Linux用户简单地创建和管理系统或应用程序容器。
+
+安装LXC
+LXC支持大多数的Linux发行版， 你可以通过LXC的源代码安装， 如果你使用的是Ubuntu，也可以通过以下命令安装
+
+sudo apt-get install lxc
+使用
+创建容器
+
+可以通过lxc-create命令来创建容器， 首先来看看lxc-create支持的命令参数（以下只列出了我感兴趣的部分参数，详细参数请自行查看）， 其中通用选项是各个lxc命令都支持的选项
+
+$ lxc-create --help
+Usage: lxc-create --name=NAME [-w] [-r] [-t template] [-P lxcpath]
+
+lxc-create creates a container
+
+选项 :
+  -n, --name=NAME    指定容器的名称
+  -f, --config=file  提供初始的配置文件
+  -t, --template=t   安装容器使用的模版（本人只试了ubunt模版）
+  -P, --lxcpath=PATH 指定容器的目录（有尝试过这个参数，不过创建失败）
+  --dir=DIR          指定容器的根目录（本人使用的1.0.0beta2版本尚未实现这个参数）
+
+通用选项 :
+  -o, --logfile=FILE               输出日志到FILE，而不是标准错误
+  -l, --logpriority=LEVEL          设置日志级别
+  -q, --quiet                      静默模式
+  -P, --lxcpath=PATH               指定lxc容器的目录
+  -?, --help                       显示帮助命令
+示例：
+
+sudo lxc-create -n mylxc -f lxc.conf -t ubuntu -- -r trusty
+lxc.conf的内容为：
+
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.name = eth0
+lxc.network.link = lxcbr0
+这就创建了一个Ubuntu 14.04的容器
+
+-t ubntu表示使用ubuntu模版
+-f lxc.conf指定容器的初始化配置
+-- 表示传给lxc-create的参数结束，后面的参数是传给模版的
+-r trusty表示创建trusty版本的ubuntu 可以通过Wiki:Ubuntu Release查看ubuntu的代号和版本号的对应表
+可以通过设置MIRROR和SECURITY_MIRROR环境变量来改变容器创建时使用的镜像地址，例如：
+
+sudo MIRROR="http://ftp.cuhk.edu.hk/pub/Linux/ubuntu" \
+     SECURITY_MIRROR="http://ftp.cuhk.edu.hk/pub/Linux/ubuntu" \
+     lxc-create -n mylxc -f lxc.conf -t ubuntu -- -r trusty
+启动LXC容器
+
+可以通过lxc-start命令来启动LXC容器，首先来看看这个命令的选项
+
+$ lxc-start --help
+Usage: lxc-start --name=NAME -- COMMAND
+
+lxc-start start COMMAND in specified container NAME
+
+选项 :
+  -n, --name=NAME        指定启动的LXC名称（对应于创建时-n参数指定的名称）
+  -d, --daemon           以守护进程的形式启动容器
+示例：
+
+sudo lxc-start -n mylxc
+我在启动容器这一步遇到了一个问题，执行lxc-start命令时，出现以下提示：
+
+lxc-start: command get_init_pid failed to receive response
+通过搜索发现是使用的lxc版本有BUG，通过使用最新版本解决 以下是解决方法：
+
+sudo add-apt-repository ppa:ubuntu-lxc/daily
+sudo apt-get update
+然后重新安装lxc
+参考网址：https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1227092
+
+如果在启动的时候提示
+
+lxc-start: Executing '/sbin/init' with no configuration file may crash the host
+那么有可能是你创建容器的时候没有指定-f 参数，或者你的配置文件没有指定网卡名称 可以通过修改 /var/lib/lxc/mylxc/config 文件，在文件后面添加以下内容解决：
+
+lxc.network.name=eth0
+自动启动
+
+LXC 支持容器随系统启动而启动。 在 Ubuntu 14.04（指的是 host os）之前，可以通过在目录：
+
+/etc/lxc/auto
+添加符号连接完成。 从 Ubuntu 14.04 开始，通过在容器的配置文件中添加以下选项实现：
+
+lxc.start.auto = 1
+lxc.start.delay = 5
+这表示本容器应该在系统启动的时候启动，并且在启动另一个容器之前需要等待 5 秒钟。
+
+登录LXC容器
+
+可以通过lxc-console命令登录到lxc容器
+
+sudo lxc-console --name=NAME [--tty NUMBER]
+当然，对我来说，更常用的是ssh登录
+
+第一次登录的时候，会发现一个问题：用户名和密码是多少呢？ 通常，在lxc-create完成后会提示你默认的用户名和密码，如果没有提示， 或者你忘了，可以通过以下方法重新设置密码：
+
+sudo chroot /var/lib/lxc/mylxc/rootfs
+sudo passwd
+设置容器的root密码，之后就可以使用root和这个密码登录了。 当然，使用root来进行日常操作不是一个好习惯，你可以创建一个新的用户，并为这个用户 添加必要的权限
+
+冻结/解冻LXC容器
+
+可以通过以下命令冻结LXC容器
+
+sudo lxc-freeze --name=NAME
+这条命令会冻结LXC容器的所有进程。这些进程会阻塞直到你使用lxc-unfreeze解冻
+
+sudo lxc-unfreeze --name=NAME
+停止LXC容器
+
+常用的方法是在LXC容器内，使用poweroff或halt之类的命令关机。 当然你也可以通过LXC提供的命令停止容器
+
+sudo lxc-stop --name=NAME
+删除LXC容器
+
+容器创建后，所有的数据都保存在：/var/lib/lxc/mylxc 目录下（默认情况，以后可能会支持自定义目录）。 我们可以通过删除这个目录来删除LXC容器，或者使用lxc-destroy命令删除
+
+$ lxc-destroy --help
+Usage: lxc-destroy --name=NAME [-f] [-P lxcpath]
+
+选项 :
+  -n, --name=NAME   容器的名称
+  -f, --force       等待容器关闭
+参考资料
+Like的世界：LXC简介
+LXC - Linux Containers
