@@ -1,0 +1,246 @@
+Ubuntu下多服务器 Rsync同步镜像服务配置
+
+主服务器：192.168.5.13_ubuntu
+
+从服务器：192.168.5.11_centos
+
+================== 1> 在两台主机上分别安装rsync===================
+
+ubuntu安装如下：
+
+# apt-get install rsync
+编译安装：下载这个免费的软件
+
+rsync.samba.org/ 或者 samba.anu.edu.au/rsync
+
+去官方网站下载最新的版本
+
+解压缩进目录后执行 #./configure && make && make install
+
+正常情况很快就安装完毕,rsync 服务器架设比较简单，可我们安装好rsync后，并没有发现配置文件以及rsync服务器启动程序，因为每个管理员可能对rsync 用途不一样，所以一般的发行版只是安装好软件就完事了，让管理员来根据自己的用途和方向来自己架设rsync服务器。
+
+=====================2> rsync服务器的配置 =====================
+
+在/etc目录下创建一个rsyncd的目录，我们用来存放rsyncd.conf，rsyncd.secrets和rsyncd.motd文件；
+
+rsyncd.conf 是rsync服务器的主配置文件；
+
+rsyncd.secrets是用户密码文件；
+
+rsyncd.motd配置一些服务欢迎及说明信息；
+
+a>创建修改 rsyncd.conf
+
+rsyncd.conf 是rsync服务器主要配置文件，我们来个简单的示例；比如我们要备份服务器上的 /tmp/目录 ，在/tmp/ 中，我想把test目录和test.php文件排除在外；
+
+zhouda# cd /etc
+zhouda# mkdir rsyncd
+zhouda# cd rsyncd
+zhouda# vi rsyncd.conf
+
+写入(保证文件中每行没有空格):
+
+复制代码
+pid file = /var/run/rsyncd.pid
+port = 873
+address = 192.168.5.13
+#uid = nobody
+#gid = nobody
+uid = root
+gid = root
+use chroot = yes
+read only = yes
+#limit access to private LANs
+#设置可访问的主机：如果多个ip则用空格隔开：192.168.5.3 192.168.5.4 192.168.5.5或者设置区间 192.168.5.3/5
+hosts allow=192.168.5.11 192.168.5.14
+hosts deny=*
+max connections = 5
+motd file = /etc/rsyncd/rsyncd.motd
+#This will give you a separate log file
+log file = /var/log/rsync.log
+#This will log every file transferred - up to 85,000+ per user, per sync
+transfer logging = yes
+log format = %t %a %m %f %b
+syslog facility = local3
+timeout = 300
+#方括号中设置模块名
+[linuxsirhome]
+#要同步服务器的目录路径
+path = /www/
+list=yes
+ignore errors
+#auth users是必须在服务器上存在的真实的系统用户，如果你想用多个用户，那就以,号隔开；比如 auth users = roger,linuxsir
+auth users = roger
+#从服务器访问需要的密码文件
+secrets file = /etc/rsyncd/rsyncd.secrets
+comment = linuxsir tmp
+#设置不同步的目录或文件用空格隔开
+exclude = test/ test.php
+复制代码
+ 
+
+b> 创建修改密码文件rsyncd.secrets
+
+zhouda#cd /etc/rsyncd
+zhouda#vi rsyncd.secrets
+写入：
+
+roger: roger
+退出保存。
+
+修改权限密码文件的权限：
+
+zhouda#chmod 600 rsyncd.secrets
+c> 创建修改rsync.motd文件
+
+rsyncd.motd是定义rysnc 服务器信息的，也就是用户登录信息。比如让用户知道这个服务器是谁提供的等；类似ftp服务器登录时，我们所看到的 linuxsir.org ftp
+……。 当然这在全局定义变量时，并不是必须的，你可以用#号注掉，或删除；如：
+
+zhouda#vi rsyncd.motd
+写入：
+
+welcome!
+===================== 3> 启动rsync服务=======================
+
+zhouda#/usr/bin/rsync --daemon --config=/etc/rsyncd/rsyncd.conf
+============ 4> 主服务器已经配置好rsync！下面我们设置从服务器============
+
+从服务器只需安装rsync即可，如果没有安装可以yum install rsync 然后运行：
+
+zhouda# /usr/bin/rsync -vzrtopg --progress roger@192.168.5.13::linuxsirhome  /tmp
+#因为没有指定密码文件，所以需要手动输入主服务器上的设定的密码
+
+输入密码：roger
+
+roger是指定密码文件中的用户名
+
+::linuxsirhome 表示在rsyncd.conf中设置的模块名
+
+/tmp是从服务器目录(192.168.5.11/tmp)
+
+到此为止，rsync的两台主机之间(192.168.5.11/tmp和192.168.5.14/tmp)的rsync同步已经配置完毕，只要在从服务器执行上述命令输入密码即可同步。
+
+注：下面这个命令行中-vzrtopg里的v是verbose，
+
+z是压缩传输，
+
+r是recursive，
+
+topg都是保持文件原有属性如属主、时间的参数。
+
+u是只同步已经更新的文件，避免没有更新的文件被重复更新一次，不过要注意两者机器的时钟的同步。
+
+--progress是指显示出详细的进度情况，
+
+--delete是指如果服务器端删除了这一文件，那么客户端也相应把文件删除，保持真正的一致。后面的roger@192.168.5.13::linuxsirhome中，之后的linuxsirhome是模块名，也就是在/etc/rsyncd /rsyncd.conf中自定义的名称，roger是指定模块中指定的可以同步的用户名。最后的/root/www是备份到本地的目录名。在这里面，还可以用-e ssh的参数建立起加密的连接。
+
+可以用–password-file=/root/rsync.pass来指定密码文件，这样就可以在脚本中使用而无需交互式地输入验证密码了，这里需要注意的是这份密码文件权限属性要设得只有属主可读。
+
+zhouda#/usr/bin/rsync -vzrtopg --progress --delete --password-file=/root/rsync.pass roger@192.168.5.13::linuxsirhome /root/www
+
+==================5> 设置主从服务器定定时自动同步==================
+
+自动同步要用到从服务器上的crond服务，关于crond的介绍请参考：linux定时执行系统
+
+我们在从服务器即192.168.5.11的/root/www目录下创建两个rsync.sh文件和rsync.pass文件。
+
+rsync.sh文件是crond要执行的脚本文件。
+
+rsync.pass是保存主服务器密码的文件。
+
+a> 创建rsync.sh文件
+
+zhouda#cd /tmp
+zhouda#vi rsync.sh
+写入:
+
+/usr/bin/rsync -vzrtopg --progress roger@192.168.5.13::linuxsirhome /root/www --password-file=/root/www/rsync.pass
+退出保存。
+
+b> 创建rsync.pass密码文件
+
+zhouda#vi rsync.pass
+写入：
+
+roger
+退出保存并修改权限：
+
+zhouda#chmod 600 rsync.pass
+zhouda# chmod 777 rsync.sh
+c> 配置crond服务
+
+zhouda#crontab -e
+添加一行：
+
+*/1 * * * * /root/www/rsync.sh  //即每分钟同步一次
+
+退出保存。
+
+设置完毕，首先自己也手工执行下./rsync.sh，看看是否能正常运行.
+
+以后每隔一分钟即会把主服务器/www目录更新至从服务器/root/www.
+
+具体参数：
+
+-v, --verbose 详细模式输出
+-q, --quiet 精简输出模式
+-c, --checksum 打开校验开关，强制对文件传输进行校验
+-a, --archive 归档模式，表示以递归方式传输文件，并保持所有文件属性，等于-rlptgoD
+-r, --recursive 对子目录以递归模式处理
+-R, --relative 使用相对路径信息
+-b, --backup 创建备份，也就是对于目的已经存在有同样的文件名时，将老的文件重新命名为~filename。可以使用--suffix选项来指定不同的备份文件前缀。
+--backup-dir 将备份文件(如~filename)存放在在目录下。
+-suffix=SUFFIX 定义备份文件前缀
+-u, --update 仅仅进行更新，也就是跳过所有已经存在于DST，并且文件时间晚于要备份的文件。(不覆盖更新的文件)
+-l, --links 保留软链结
+-L, --copy-links 想对待常规文件一样处理软链结
+--copy-unsafe-links 仅仅拷贝指向SRC路径目录树以外的链结
+--safe-links 忽略指向SRC路径目录树以外的链结
+-H, --hard-links 保留硬链结
+-p, --perms 保持文件权限
+-o, --owner 保持文件属主信息
+-g, --group 保持文件属组信息
+-D, --devices 保持设备文件信息
+-t, --times 保持文件时间信息
+-S, --sparse 对稀疏文件进行特殊处理以节省DST的空间
+-n, --dry-run现实哪些文件将被传输
+-W, --whole-file 拷贝文件，不进行增量检测
+-x, --one-file-system 不要跨越文件系统边界
+-B, --block-size=SIZE 检验算法使用的块尺寸，默认是700字节
+-e, --rsh=COMMAND 指定使用rsh、ssh方式进行数据同步
+--rsync-path=PATH 指定远程服务器上的rsync命令所在路径信息
+-C, --cvs-exclude 使用和CVS一样的方法自动忽略文件，用来排除那些不希望传输的文件
+--existing 仅仅更新那些已经存在于DST的文件，而不备份那些新创建的文件
+--delete 删除那些DST中SRC没有的文件
+--delete-excluded 同样删除接收端那些被该选项指定排除的文件
+--delete-after 传输结束以后再删除
+--ignore-errors 及时出现IO错误也进行删除
+--max-delete=NUM 最多删除NUM个文件
+--partial 保留那些因故没有完全传输的文件，以是加快随后的再次传输
+--force 强制删除目录，即使不为空
+--numeric-ids 不将数字的用户和组ID匹配为用户名和组名
+--timeout=TIME IP超时时间，单位为秒
+-I, --ignore-times 不跳过那些有同样的时间和长度的文件
+--size-only 当决定是否要备份文件时，仅仅察看文件大小而不考虑文件时间
+--modify-window=NUM 决定文件是否时间相同时使用的时间戳窗口，默认为0
+-T --temp-dir=DIR 在DIR中创建临时文件
+--compare-dest=DIR 同样比较DIR中的文件来决定是否需要备份
+-P 等同于 --partial
+--progress 显示备份过程
+-z, --compress 对备份的文件在传输时进行压缩处理
+--exclude=PATTERN 指定排除不需要传输的文件模式
+--include=PATTERN 指定不排除而需要传输的文件模式
+--exclude-from=FILE 排除FILE中指定模式的文件
+--include-from=FILE 不排除FILE指定模式匹配的文件
+--version 打印版本信息
+--address 绑定到特定的地址
+--config=FILE 指定其他的配置文件，不使用默认的rsyncd.conf文件
+--port=PORT 指定其他的rsync服务端口
+--blocking-io 对远程shell使用阻塞IO
+-stats 给出某些文件的传输状态
+--progress 在传输时现实传输过程
+--log-format=formAT 指定日志文件格式
+--password-file=FILE 从FILE中得到密码
+--bwlimit=KBPS 限制I/O带宽，KBytes per second
+-h, --help 显示帮助信息
+ 
