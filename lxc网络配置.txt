@@ -1,0 +1,66 @@
+可以通过如下命令验证：
+# brctl show
+bridge name	bridge id		STP enabled	interfaces
+lxcbr0		8000.3eef2e882ac9	no		vetheCYpw4
+
+修改 LXC 网络接口的方法
+一般我们是通过修改 lxcbr0 的设置文件的方法来实现的。通过〝ifconfig lxcbr0〞的命令，可以得知 lxcbr0 本身的 IP 地址，而由〝ps aux | grep dnsmasq〞的命令，也可以清楚看到 DHCP Server 分配的 IP 范围，因此可以知道 LXC 缺省虚拟网络预设的 IP 区段为 10.0.3.0/24，那么，这些信息，可以修改吗？当然可以，以上这些网络信息，是 LXC 缺省预设的网络设置，所以可以通过修改配置文件的方式，来修改相关信息，以符合实际应用的状况，可以利用编辑器来修改 LXC 的网络配置文件：
+# vi /etc/default/lxc
+清单 1./etc/default/lxc 文件内容
+LXC_BRIDGE="lxcbr0"
+LXC_ADDR="10.0.3.1"
+LXC_NETMASK="255.255.255.0"
+LXC_NETWORK="10.0.3.0/24"
+LXC_DHCP_RANGE="10.0.3.2,10.0.3.254"
+LXC_DHCP_MAX="253"
+LXC_SHUTDOWN_TIMEOUT=120
+用户修改后要重新启动网络服务，使用如下命令：
+#service lxc-net restart
+设置 LXC 使用物理网络接口
+相比 KVM 来说，LXC 可以直接使用物理网络接口（比如在本文中物理网卡是 eth0、eth1，笔者准备把 eth0 分配给 LXC 虚拟网络 ）。首先使用“ ifconfig –a”命令查看一下，其中而 eth1 为实体计算机实际对外联机所使用的网络接口，所 eth0 ，就可以拿来设定给 LXC 虚拟计算机来使用。然后修改修改 LXC 虚拟计算机的配置文件：/var/lib/lxc/cjhlxc1/config
+#vi /var/lib/lxc/cjhlxc1/config
+清单 2 /var/lib/lxc/cjhlxc1/config 文件内容
+lxc.network.type=phys
+lxc.network.link=eth0
+lxc.network.flags=up
+lxc.utsname = cjhlxc1
+#lxc.network.hwaddr = 00:16:3e:f9:ad:be #此行要注释掉#
+lxc.devttydir = lxc
+lxc.tty = 4
+lxc.pts = 1024
+lxc.rootfs = /var/lib/lxc/myt2/rootfs
+lxc.mount  = /var/lib/lxc/myt2/fstab
+lxc.arch = amd64
+lxc.cap.drop = sys_module mac_admin
+lxc.pivotdir = lxc_putold
+修改完成后存盘退出。简单说明一下以上参数：
+lxc.network.type 指定用于容器的网络类型，包括四种类型：
+empty：建立一个没有使用的网络接口
+veth：容器将链接到 lxc.network.link 定义的网桥上，从而与外部通信。之前网桥必须在预先建立。
+macvlan：一个 macvlan 的接口会链接到 lxc.network.link 上。
+phys： lxc.network.link 指定的物理接口分配给容器。
+lxc.network.flags 用于指定网络的状态，up 表示网络处于可用状态。
+lxc.network.link 用于指定用于和容器接口通信的真实接口，比如一个网桥 br0 。
+lxc.network.hwaddr 用于指定容器的网络接口的 mac 地址。
+下面修改主机网络配置文件
+ #vim /etc/network/interface
+注意此时配置文件是空文件，没有内容。通常可以设置为固定 IP 地址模式（见清单 3）或者通过 DHCP 服务器获取 IP 地址模式（见清单 4）
+清单 3.固定 IP 地址模式
+auto lo
+iface lo inet loopback
+auto eth0
+iface eth0 inet dhcp
+dns-nameservers 10.0.0.4
+清单 4.通过 DHCP 服务器获取 IP 地址模式
+auto lo
+iface lo inet loopback
+auto eth0
+iface eth0 inet static
+        address 10.0.0.3
+        netmask 255.255.255.0
+        dns-nameservers 10.0.0.4
+修改完成后存盘退出。然后重新启动网络服务：
+ #/etc/init.d/networking restart
+下面启动 LXC 虚拟计算机
+# lxc-start  -n  cjhlxc1
+注意一旦 LXC 虚拟计算机启动成功，在宿主计算机上使用〝ifconfig -a〞查看主机网络接口，用户会发现此时网络接口 eth0 消失了，只有 eth1 。这是因为 eth0 已经让 LXC 虚拟计算机给使用了。然后我们使用如下命令“ lxc-console -n cjhlxc1”登录 LXC 虚拟计算机发现此时 LXC 虚拟计算机的网络接口是 eth0。然后我们可以使用 ping 命令测试一下 LXC 虚拟计算机和互联网是否联通。
