@@ -15,3 +15,26 @@ jiaoqiang@jiaoqiang-HP-450-Notebook-PC:~$ sudo lxc-start -n mylxc -d
 lxc-start: lxc_start.c: main: 341 The container failed to start.
 lxc-start: lxc_start.c: main: 343 To get more details, run the container in foreground mode.
 lxc-start: lxc_start.c: main: 345 Additional information can be obtained by setting the --logfile and --logpriority options.
+运行：
+ sudo lxc-start -F -n mojo-how-tThe contents of /var/lib/lxc/mojo-how-to.trusty/config:
+
+# Template used to create this container: /usr/share/lxc/templates/lxc-ubuntu
+# Parameters passed to the template: --release trusty
+# For additional config options, please look at lxc.container.conf(5)
+
+# Common configuration
+lxc.include = /usr/share/lxc/config/ubuntu.common.conf
+
+# Container specific configuration
+lxc.rootfs = /srv/mojo/mojo-how-to/trusty/ROOTFS
+lxc.mount = /var/lib/lxc/mojo-how-to.trusty/fstab
+lxc.utsname = mojo-how-to.trusty
+lxc.arch = amd64
+
+# Network configuration
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.link = lxcbr0
+lxc.network.hwaddr = 00:16:3e:59:8d:2b
+ubuntu@mojo:~$ sudo find /sys/fs/cgroup -type do.trusty -o /dev/stdout -l debug
+ 
