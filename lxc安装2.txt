@@ -42,6 +42,16 @@ lxc.network.name = eth0
 lxc.network.link = lxcbr0
 这就创建了一个Ubuntu 14.04的容器
 
+使用的是 ubuntu 模板，模板文件保存在/usr/lib/lxc/templates/目录下
+# tree /usr/lib/lxc/templates/
+/usr/lib/lxc/templates/
+├── lxc-busybox
+├── lxc-debian
+├── lxc-fedora
+├── lxc-opensuse
+├── lxc-sshd
+├── lxc-ubuntu
+└── lxc-ubuntu-cloud
 -t ubntu表示使用ubuntu模版
 -f lxc.conf指定容器的初始化配置
 -- 表示传给lxc-create的参数结束，后面的参数是传给模版的
