@@ -1,0 +1,59 @@
+Ubuntu的仓库
+该Adiscon Ubuntu的仓库已被设置为在Ubuntu最新版本的rsyslog现在包括必要的第三方软件包的支持。
+
+目前支持Ubuntu的版本：
+
+Ubuntu的14.04（可信赖的）
+Ubuntu的14.10（乌托邦/每天仅版本）
+Ubuntu的12.04（精确）
+目前支持的rsyslog现在分支：
+
+V8稳定
+V8-DEVEL（每日构建）
+V7稳定（过时的，不建议再使用）
+新的软件包是基于在原来的Ubuntu 12 rsyslog现在包。
+
+要安装在Ubuntu当前rsyslog现在的版本：
+
+打开一个终端
+输入以下命令：
+sudo的附加的apt-库PPA：adiscon / V8稳定 
+如果您要添加的存储库  手动（不推荐），请点击此链接。
+
+然后更新您的贴切缓存：
+sudo易于得到更新
+最后，安装新版本的rsyslog现在：
+sudo易于得到安装rsyslog，
+
+
+
+Ubuntu Repository
+The Adiscon Ubuntu Repository has been setup to provide the latest rsyslog versions on Ubuntu including support for necessary third party packages.
+
+Currently supported Ubuntu Versions:
+
+Ubuntu 14.04 (Trusty)
+Ubuntu 14.10 (Utopic/daily builds only)
+Ubuntu 12.04 (Precise)
+Currently supported rsyslog branches:
+
+v8-stable
+v8-devel (daily builds)
+v7-stable (outdated, not recommended to be used anymore)
+The new packages are based in the original Ubuntu 12 rsyslog packages.
+
+To install a current rsyslog version on Ubuntu:
+
+Open a Terminal
+Enter the following command:
+sudo add-apt-repository ppa:adiscon/v8-stable 
+If you want to add the repositories  manually (not recommended) follow this link.
+
+Then update your apt cache:
+sudo apt-get update
+Finally install the new rsyslog version:
+sudo apt-get install rsyslog
+We highly appreciate any feedback or bug reports.
+
+The following short video shows how the steps are actually done:
+
