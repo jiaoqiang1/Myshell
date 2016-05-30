@@ -6,3 +6,12 @@ lxc-start: sync.c: __sync_wait: 51 invalid sequence number 1. expected 2
 lxc-start: start.c: __lxc_start: 1121 failed to spawn 'mylxc'
 lxc-start: lxc_start.c: main: 341 The container failed to start.
 lxc-start: lxc_start.c: main: 345 Additional information can be obtained by setting the --logfile and --logpriority options.
+
+
+
+
+
+jiaoqiang@jiaoqiang-HP-450-Notebook-PC:~$ sudo lxc-start -n mylxc -d
+lxc-start: lxc_start.c: main: 341 The container failed to start.
+lxc-start: lxc_start.c: main: 343 To get more details, run the container in foreground mode.
+lxc-start: lxc_start.c: main: 345 Additional information can be obtained by setting the --logfile and --logpriority options.
