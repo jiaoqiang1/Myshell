@@ -1,0 +1,8 @@
+lxc-start: conf.c: setup_rootfs: 1631 failed to mount rootfs
+lxc-start: conf.c: do_rootfs_setup: 4200 failed to setup rootfs for 'mylxc'
+lxc-start: conf.c: lxc_setup: 4241 Error setting up rootfs mount after spawn
+lxc-start: start.c: do_start: 717 failed to setup the container
+lxc-start: sync.c: __sync_wait: 51 invalid sequence number 1. expected 2
+lxc-start: start.c: __lxc_start: 1121 failed to spawn 'mylxc'
+lxc-start: lxc_start.c: main: 341 The container failed to start.
+lxc-start: lxc_start.c: main: 345 Additional information can be obtained by setting the --logfile and --logpriority options.
