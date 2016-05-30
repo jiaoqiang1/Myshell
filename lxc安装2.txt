@@ -127,8 +127,22 @@ $ lxc-destroy --help
 Usage: lxc-destroy --name=NAME [-f] [-P lxcpath]
 
 选项 :
-  -n, --name=NAME   容器的名称
+  -n, --name=NAME   容器的名称让我们来看看一些脚本可用的选项。
+ 
+  该LXC-网络脚本位于/etc/init.d/目录或/ etc /初始化/在Ubuntu。 在参考文本编辑器打开它。
+  ＃建立LXC网络
+ USE_LXC_BRIDGE =“假”
+ LXC_BRIDGE =“lxcbr0”
+ LXC_ADDR =“10.0.3.1”
+ LXC_NETMASK =“255.255.255.0”
+ LXC_NETWORK =“10.0.3.0/24”
+ LXC_DHCP_RANGE =“10.0.3.2,10.0.3.254”
+ LXC_DHCP_MAX =“253”
+ LXC_DHCP_CONFILE =“/等/ LXC / dnsmasq.conf”
+ varrun =“/ var / run中/ LXC”
+ LXC_DOMAIN =“LXC” 
   -f, --force       等待容器关闭
+  
 参考资料
 Like的世界：LXC简介
 LXC - Linux Containers
