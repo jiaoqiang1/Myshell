@@ -4,3 +4,33 @@ lxc-start: start.c: lxc_spawn: 856 failed to create the network
 lxc-start: start.c: __lxc_start: 1121 failed to spawn 'net'
 lxc-start: lxc_start.c: main: 341 The container failed to start.
 lxc-start: lxc_start.c: main: 345 Additional information can be obtained by setting the --logfile and --logpriority options.
+方法1
+$ yum install -y libvirt
+$ systemctl start libvirtd
+$ brctl show
+bridge name bridge id       STP enabled interfaces
+virbr0      8000.fea2866efadb   yes     veth7ATCJK
+方法2：
+Root Cause failed attach the bridge virbr0 or lxcbr0
+its because of the container can not create bridge, can be because of your bridge is not created yet, or the network device on container is failed to create.
+LXC container does not start solution
+check your bridge
+use ifconfig or brctl to check that your bridge (on Host Server, not on guest) is exist and enable, ensure virbr0
+brctl show
+if doen't exists, you can add with brctl addbr virbr0
+ ensure that guest hwaddr is changed, you need to do this to make guest host initiate from beginning to create networking device. Change it on /var/lib/lxc/(NAME_of_YOUR_CONTAINER)/config
+ensure that your bridge have IP in the same network of your lxc container and make it Up
+sudo brctl addbr virbr0
+sudo ifconfig virbr0 10.0.5.1 netmask 255.255.255.0 up
+翻译：
+根本原因未能连接桥virbr0或lxcbr0
+它因为容器不能创建桥，可能是因为你的桥尚未创建，或在容器中的网络设备无法创建。
+LXC容器不启动的解决方案
+检查您的桥梁
+使用ifconfig命令或brctl检查您的桥梁（主机服务器上，而不是在来宾）的存在并启用，确保virbr0
+brctl秀
+如果doen't存在，你可以添加brctl addbr virbr0
+ 确保客人HWADDR被改变，你需要做这做嘉宾主持，从年初开始创建网络设备。改变它的/ var / lib中/ LXC /（NAME_of_YOUR_CONTAINER）/配置
+确保您的桥梁有IP的LXC容器的同一网络中，并使其向上
+须藤brctl addbr virbr0
+须藤使用ifconfig virbr0 10.0.5.1网络掩码255.255.255.0了
