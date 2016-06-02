@@ -1,0 +1,56 @@
+/etc/sysconfig/network-scripts/ifcfg-et0中:
+ONBOOT="yes"
+ifconfig查看虚拟机和主机网络设置
+新版lxc自带一个桥接lxcbr0 (10.0.3.1)，物理网卡通过NAT桥接到lxcbr0 ，网段为10.0.3.0/24。
+果上面新创建的虚拟机启动失败，很可能是lxcbr0 没有启动。
+/var/lib/lxc/vm01/config
+lxc.network.type= veth
+lxc.network.link = lxcbr0
+lxc.network.flags = up
+lxc.network.name = eth0
+lxc.network.ipv4 = 10.0.3.2/24
+lxc.network.ipv4.gateway = 10.0.3.1
+如果需要第二块网卡，则继续在/var/lib/lxc/vm01/config添加一组配置
+lxc.network.type = veth
+lxc.network.link = lxcbr0
+lxc.network.flags = up
+lxc.network.name = eth1
+lxc.network.ipv4 = 10.0.3.3/24
+如果要隔绝虚拟机与宿主机的通讯
+虚拟机之间可以通信，与局域网其他机器也可以通信
+网卡可选择macvlan中的bridge模式
+lxc.network.type = macvlan
+lxc.network.macvlan.mode = bridge
+lxc.network.flags = up
+lxc.network.link = eth0
+如果要进一步隔离同一宿主机上不同虚拟机之间的通讯
+（仅可与局域网其他机器通信
+网卡还要选择macvlan中的vepa模式
+lxc.network.type = macvlan
+lxc.network.macvlan.mode = vepa
+lxc.network.flags = up
+lxc.network.link = eth0
+empty表示容器没有网卡，仅有一个回环lo，无法通过网络层与外部通信。用于某些特殊的场合。比如将宿主机的某个图片目录挂载到容器里，容器利用有限的资源对图片进行处理，如果放在宿主机上处理，图片处理占用的资源可能不好控制，影响整体性能。
+lxc.network.type = vlan
+控制虚拟机的资源
+虚拟机默认与宿主机共享硬件资源，CPU，内存，IO等，也可以用cgroup实现资源隔离。
+#设置虚拟机只使用0，1两个CPU核心
+lxc-cgroup -n centos cpuset.cpus 0,1
+#设置虚拟机可用内存为512M
+lxc-cgroup -n centos memory.limit_in_bytes 536870912
+#设置虚拟机消耗的CPU时间
+ lxc-cgroup -n centos cpu.shares 256
+#设置虚拟机消耗的IO权重
+ lxc-cgroup -n centos blkio.weight 500
+另一种限制资源的方法是将具体的限制写入虚拟机的配置文件，可选的参数如下：
+
+#设置虚拟机只使用0，1两个CPU核心
+lxc.cgroup.cpuset.cpus  = 0,1
+#设置虚拟机消耗的CPU时间
+lxc.cgroup.cpu.shares  = 256
+#设置虚拟机可用内存为512M
+lxc.cgroup.memory.limit_in_bytes = 512M
+#限制虚拟机可用的内存和swap空间一共1G
+lxc.cgroup.memory.memsw.limit_in_bytes = 1G
+#设置虚拟机可使用的IO权重
+lxc.cgroup.blkio.weight=500

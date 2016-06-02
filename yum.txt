@@ -1,0 +1,14 @@
+yum命令本身就可以用来下载一个RPM包，标准的yum命令提供了--downloadonly(只下载)的选项来达到这个目的。
+(1)sudo yum install --downloadonly <package-name>
+默认情况下，一个下载的RPM包会保存在下面的目录中:
+/var/cache/yum/x86_64/[centos/fedora-version]/[repository]/packages
+(2)如果你想要将一个包下载到一个指定的目录(如/tmp)：
+ sudo yum install --downloadonly --downloaddir=/tmp <package-name>
+CentOS/RHEL 6或更早期的版本中你需要安装一个单独yum插件(名称为 yum-plugin-downloadonly)
+ sudo yum install yum-plugin-downloadonly
+如果没有该插件，你会在使用yum时得到以下错误:
+Command line error: no such option: --downloadonly
+外一个下载RPM包的方法就是:
+ sudo yum install yum-utils
+下载一个RPM包
+ sudo yumdownloader <package-name>
