@@ -1,0 +1,3 @@
+sysctl -a | grep max_queued_events
+ Event Queue Overflow
+ max_queued_events：
