@@ -1,0 +1,41 @@
+在数据备份服务器上安装rsync服务端
+yum install rsync
+默认安装后，在/etc目录下，并不存在rsyncd目录，需要手动创建配置文件目录
+
+mkdir /etc/rsyncd
+但是因为我想将所有配置文件放在特定的目录，所以我创建了自己的目录和rsync server的配置文件rsync.conf
+
+mkdir /app/rsync
+
+vi /app/rsync/rsync.conf
+
+uid = root
+gid = root
+use chroot = no
+max connections = 3
+timeout = 800
+pid file = /var/run/rsyncd.pid
+lockfile = /var/run/rsyncd.lock
+log file = /var/log/rsyncd.log
+[uploads]
+path = /app/www/Uploads
+ignore errors = yes
+hosts allow = 10.111.111.112
+hosts deny = *
+read only = no
+write only = no
+list = yes
+uid = www
+gid = www
+auth users = www
+secrets file = /app/rsync/rsync.passwd
+创建secrets file验证文件,并且设置权限为600
+
+echo "www:123456" > /app/rsync/rsync.passwd
+
+chmod 600 /app/rsync/rsync.passwd
+这个验证文件需要账号和密码，用冒号分隔开，用来给客户端client验证使用的。
+运行demon模式
+
+rsync --daemon --config=/app/rsync/rsync.conf
+daemon 模式可以保持进程一直运行而不被系统强制关闭，可能会有系统信号hangup影响。
