@@ -1,0 +1,92 @@
+开始配置
+在数据源服务器上安装rsync client 和inotify-tools
+yum -y install rsync inotify-tools
+
+Loaded plugins: security
+Setting up Install Process
+Resolving Dependencies
+--> Running transaction check
+---> Package inotify-tools.i686 0:3.14-1.el6 will be installed
+---> Package rsync.i686 0:3.0.6-9.el6_4.1 will be updated
+---> Package rsync.i686 0:3.0.6-12.el6 will be an update
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+=============================================================================================================================================================================================================================================
+ Package   Arch Version   RepositorySize
+=============================================================================================================================================================================================================================================
+Installing:
+ inotify-tools i686 3.14-1.el6epel  45 k
+Updating:
+ rsync i686 3.0.6-12.el6  base 329 k
+
+Transaction Summary
+=============================================================================================================================================================================================================================================
+Install   1 Package(s)
+Upgrade   1 Package(s)
+
+Total download size: 375 k
+Downloading Packages:
+(1/2): inotify-tools-3.14-1.el6.i686.rpm  |  45 kB 00:00 
+(2/2): rsync-3.0.6-12.el6.i686.rpm| 329 kB 00:00 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total509 kB/s | 375 kB 00:00 
+Running rpm_check_debug
+Running Transaction Test
+Transaction Test Succeeded
+Running Transaction
+  Updating   : rsync-3.0.6-12.el6.i686   1/3 
+  Installing : inotify-tools-3.14-1.el6.i686 2/3 
+  Cleanup: rsync-3.0.6-9.el6_4.1.i6863/3 
+  Verifying  : inotify-tools-3.14-1.el6.i686 1/3 
+  Verifying  : rsync-3.0.6-12.el6.i686   2/3 
+  Verifying  : rsync-3.0.6-9.el6_4.1.i6863/3 
+
+Installed:
+  inotify-tools.i686 0:3.14-1.el6
+
+Updated:
+  rsync.i686 0:3.0.6-12.el6  
+
+Complete!
+rsync client和server是同一个软件，而inotify是linux 内核2.6以上才有的特性。
+创建rsync client 和inotify 合体脚本
+mkdir /app/rsync
+
+vi /app/rsync/rsync_do.sh
+
+#!/bin/bash
+
+src='/app/www/Uploads/'
+passwordfile='/app/rsync/rsync.passwd'
+user='www'
+host='10.111.111.111'
+rsync_module='uploads'
+
+/usr/bin/inotifywait -mrq --timefmt '%d/%m/%y %H:%M' --format '%T %w %f' -e modify,delete,create,attrib ${src} | while read DATE TIME DIR file
+do
+/usr/bin/rsync -vzrtopg --delete --progress ${src} ${user}@${host}::${rsync_module} --password-file=${passwordfile}
+
+echo "${file} was rsynced at ${DATE}_${TIME} in ${DIR}" >> /var/log/rsync.log 2>&1
+done
+1.inotifywait 是inotify的命令工具
+
+2.rsync的src目录需要注意，源目录也跟rsync一样，对于文件夹是区分有/和没有/的
+
+3.需要注意rsync的同步的模块名字要匹配
+
+4.inotifywait命令可以监听操作，输出信息，并且是一直输出，所以跟read 搭配起来，将inotifywait的输出通过read捕获到变量
+强制记录了同步日志输出到/var/log/rsync.log
+
+5.--delete参数需要注意，这个会删除源目录没有的东西，所以在没有确定和测试好脚本之前可以先暂时不加这个参数
+
+6.脚本中的rsync解析出来就是/usr/bin/rsync -vzrtopg --delete --progress /app/www/uploads/ www@$10.111.111.111::uploads --password-file=/app/rsync/rsync.passwd, 同步的目录是/app/www/uploads/，使用www这个用户进行同步，目标服务器是10.111.111.111，rsync的模块是uploads，这样就可以将源服务器的/app/www/uploads/下的所有数据（uploads目录本身）同步到备份服务器的/app/www/uploads/上，有delete参数，保持源和备份一致。
+需要创建/app/rsync/rsync.passwd
+
+echo "123456" > /app/rsync/rsync.passwd
+这里只需要写密码就好了，因为账号已经在命令行指明了。
+nohup运行作为监听服务
+
+nohup /app/rsync/rsync_do.sh & 
+使用nohup + & 运行是为了将程序放置在后台运行，主要是为了忽略系统发出的hangup信号而导致关闭
