@@ -1,0 +1,59 @@
+配置rsync实现日志同步笔记
+2011-08-05 16:48:32
+标签：笔记 休闲 centos rsync 日志同步
+原创作品，允许转载，转载时请务必以超链接形式标明文章 原始出处 、作者信息和本声明。否则将追究法律责任。http://haolulu.blog.51cto.com/3164472/632086
+ 由于系统默认安装rsync服务，这里我就省略如何安装rsync
+安装服务器：
+ 
+mkdir -p /etc/rsyncd/           创建rsync主目录  
+touch /etc/rsyncd/rsyncd.conf     创建主配置文件
+touch /etc/rsyncd/rsyncd.secrets   创建rsync信息
+chmod 600 /etc/rsyncd/rsyncd.secrets   修改权限
+touch /etc/rsyncd/rsyncd.motd    创建rsync说明文档
+ls -lh /etc/rsyncd/rsyncd.secrets    创建连接
+vi /etc/rsyncd/rsyncd.secrets  修改帐号信息
+ 
+xiaolu:123456   用户名密码（无需系统帐号）
+ 
+ 
+vi /etc/rsyncd/rsyncd.conf  修改主配置文件
+ 
+ 
+ 
+pid file = /var/run/rsyncd.pid     写入进程pid内
+port = 873   端口号
+address = 192.168.20.167   服务器IP地址
+uid =root     
+gid = root
+use chroot = yes
+read only = yes      权限只读
+hosts allow = *    允许所有
+motd file = /etc/rsyncd/rsyncd.motd    说明文档位置
+timeout = 300   超时时间
+transfer logging = yes
+log file = /var/log/rsync.log   访问日志位置
+[ log ]     别名（用于同步rsync目录）
+        path = /qq       同步文件夹位置
+        list = yes    
+        ignore errors   忽略io错误
+        auth users = xiaolu    认证用户
+        secrets file = /etc/rsyncd/rsyncd.secrets   用户密码
+        exclude = error_log httpd.pid     排除不同步
+ 
+ 
+/usr/bin/rsync --daemon --config=/etc/rsyncd/rsyncd.conf   启动进程、并制定主配置文件
+ 
+ 
+ 
+客户端配置：
+mkdir /etc/rsyncd/  创建rsync目录
+touch rsyncd.password    创建密码文件
+echo "123456" > rsyncd.password    追加密码
+ 
+chmod 600 /etc/rsyncd/rsyncd.password
+ 
+rsync -avP --password-file=rsyncd.password xiaolu@192.168.20.167::log /qq/
+--password-file=rsyncd.password   手动同步命令
+ 
+ 
+ 
