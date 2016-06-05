@@ -1,0 +1,2 @@
+rsync: failed to connect to 192.168.1.103 (192.168.1.103): No route to host (113)
+rsync error: error in socket IO (code 10) at clientserver.c(128) [Receiver=3.1.0]
