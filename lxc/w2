@@ -1,0 +1,75 @@
+1) 使用网桥
+假设我们主机只有eth0的物理网卡，在主机/etc/network/interfaces中，直接加入下面的字段：
+
+auto br0
+iface br0 inet dhcp
+bridge_ports eth0
+bridge_fd 0
+bridge_maxwait 0
+然后重启网络 /etc/init.d/networking restart 之后可以发现主机网络出现br0的网桥。
+
+如果LXC在编译时没有配置路径，容器的config默认路径在/usr/local/var/lib/lxc/xxx/config ，我们需要在这个文件中加入网络选项
+
+lxc.network.type = veth
+lxc.network.flags = up
+
+# that's the interface defined above in host's interfaces file
+lxc.network.link = br0
+
+# name of network device inside the container,
+# defaults to eth0, you could choose a name freely
+# lxc.network.name = lxcnet0
+
+lxc.network.hwaddr = 00:FF:AA:00:00:01
+然后我们在容器的/etc/network/interfaces中，添加
+
+auto eth0
+iface eth0 inet dhcp
+如果容器中没有开启dhclient服务，最好将其加到 /etc/rc.local中即可。
+
+2) 直接使用物理网卡
+比如物理宿主主机拥有两张网卡：eth0 与 eth1，我把eth0作为主机使用，eth1作为LXC使用。那么我们在config中添加
+
+lxc.network.type=phys
+lxc.network.link=eth1
+lxc.network.flags=up
+#lxc.network.hwaddr = 00:16:3e:f9:ad:be #注释掉#
+lxc.network.flags 用于指定网络的状态，up 表示网络处于可用状态。
+lxc.network.link 用于指定用于和容器接口通信的真实接口，比如一个网桥 br0 ，eth0等。
+
+在主机/etc/network/interfaces中加入
+
+auto eth1
+iface eth1 inet dhcp
+然后重新启动网络服务 #/etc/init.d/networking restart
+重新启动 LXC 容器 # lxc-start -n xxx
+
+一旦 LXC 虚拟计算机启动成功，在宿主计算机上使用〝ifconfig -a〞查看主机网络接口，用户会发现此时网络接口 eth1 消失了，只有 eth0 。这是因为 eth1 已经让 LXC 虚拟计算机给使用了。然后我们使用如下命令“ lxc-attach -n xxx”登录 LXC 虚拟计算机发现此时 LXC 虚拟计算机的网络接口是 eth1。然后我们可以使用 ping 命令测试一下 LXC 虚拟计算机和互联网是否联通。
+
+3) 容器配置静态IP
+如果我们使用静态IP的话，宿主机可以使用静态IP或者是DHCP，我们假定宿主机是DHCP，容器是静态IP，注意最后两个字段：
+
+lxc.network.type = veth
+lxc.network.flags = up
+
+# that's the interface defined above in host's interfaces file
+lxc.network.link = br0
+
+# name of network device inside the container,
+# defaults to eth0, you could choose a name freely
+# lxc.network.name = lxcnet0
+
+lxc.network.hwaddr = 00:FF:AA:00:00:01
+lxc.network.ipv4 = 192.168.1.110/24#注意设置为宿主机的网段
+lxc.network.ipv4.gateway = 192.168.1.1#注意设置为宿主机的网段
+在容器内的/etc/network/interfaces中加入，记住不加auto eth0！
+
+iface eth0 inet static
+address 
+netmask 255.255.255.0
+network 
+broadcast 
+gateway 
+# dns-* options are implemented by the resolvconf package, if installed
+dns-nameservers 
+dns-search your.search.domain.here
