@@ -1,0 +1,288 @@
+
+鉴于公司业务，需要将中美双方数据互通。就此，提出使用rsync + sersync2 来实现。下面是本地测试环境：
+
+前言部分：来自osyunwei.com（http://www.osyunwei.com/archives/7447.html）
+
+一、为什么要用rsync+sersync架构?
+
+1、sersync是基于inotify开发的，类似于inotify-tools的工具
+
+2、sersync可以记录下被监听目录中发生变化的（包括增加、删除、修改）具体某一个文件或某一个目录的名字，然后使用rsync同步的时候，只同步发生变化的这个文件或者这个目录。
+
+二、rsync+inotify-tools与rsync+sersync这两种架构有什么区别？
+
+1、rsync+inotify-tools
+
+（1）：inotify-tools只能记录下被监听的目录发生了变化（包括增加、删除、修改），并没有把具体是哪个文件或者哪个目录发生了变化记录下来；
+
+（2）：rsync在同步的时候，并不知道具体是哪个文件或者哪个目录发生了变化，每次都是对整个目录进行同步，当数据量很大时，整个目录同步非常耗时（rsync要对整个目录遍历查找对比文件），因此，效率很低。
+
+2、rsync+sersync
+
+（1）：sersync可以记录下被监听目录中发生变化的（包括增加、删除、修改）具体某一个文件或某一个目录的名字；
+
+（2）：rsync在同步的时候，只同步发生变化的这个文件或者这个目录（每次发生变化的数据相对整个同步目录数据来说是很小的，rsync在遍历查找比对文件时，速度很快），因此，效率很高。
+
+小结：当同步的目录数据量不大时，建议使用rsync+inotify-tools；当数据量很大（几百g甚至1t以上）、文件很多时，建议使用rsync+sersync。
+
+实践部分：
+
+系统环境：
+10.211.55.7        Linux node01.com 3.19.0-25-generic #26~14.04.1-Ubuntu SMP Fri Jul 24 21:16:20 UTC 2015 x86_64 GNU/Linux        sersync2 + rsync
+10.211.55.8        Linux node02.com 3.19.0-25-generic #26~14.04.1-Ubuntu SMP Fri Jul 24 21:16:20 UTC 2015 x86_64 GNU/Linux        rsync
+复制代码
+
+第一分部：110.211.55.8        Linux node02.com 数据接收端 rsync 的配置
+
+1、先确定接收端是否有安装rsync 工具：
+linuser@node02:~$ dpkg -s rsync
+Package: rsync
+Status: install ok installed
+Priority: optional
+..........................省略..........................
+复制代码
+
+2、在/etc 目录下创建rsyncd.conf 文件:
+linuser@node02:~$ sudo vim /etc/rsyncd.conf
+复制代码
+配置如下：
+uid = root                                                                                #设置rsync 运行的用户权限为root
+gid = root                                                                                #设置rsync 运行的组权限为root
+use chroot = no                                                                        #默认为true，修改为no，增加对目录文件软连接的备份
+max connections = 2000                                                        #最大连接数
+timeout = 600                                                                        #设置超时时间
+pid file = /var/run/rsyncd.pid                                        #pid文件的存放位置
+lock file = /var/run/rsync.lock                                        #支持max connections参数的锁文件
+log file = /var/log/rsyncd.log                                        #日志文件位置，启动rsync后自动产生这个文件，无需提前创建
+ignore errors
+port = 873                                                                                #定义端口
+read only = false                                                                #设置rsync服务端文件为读写权限
+list = false                                                                        #不显示rsync服务端资源列表
+hosts allow = 10.211.55.7                                                #允许进行数据同步的客户端IP地址，可以设置多个，用英文状态下逗号隔开
+hosts deny = *                                                                        #禁止数据同步的客户端IP地址，可以设置多个，用英文状态下逗号隔开，用* 代表所有
+auth user = qinggu                                                                #执行数据同步的用户名，可以设置多个，用英文状态下逗号隔开
+secrets file = /etc/rsync.password                                #用户认证配置文件，里面保存用户名称和密码，后面会创建这个文件
+motd file = /etc/rsyncd.Motd                                          #rsync启动时欢迎信息页面文件位置（文件内容自定义）
+
+[data]                                                                                        #自定义模块名称,sersync 配置文件需要
+comment = data                                                                         #模块名称与[home_www.osyunwei.com]自定义名称相同
+path = /data/10.211.55.7                                                #接收服务端同步到本地的数据存放路径
+复制代码
+保存退出！
+
+3、根据rsyncd.conf 文件的配置，在/etc 目录下创建同步的验证文件rsync.password：
+linuser@node02:~$ sudo vim /etc/rsync.password
+复制代码
+内容如下：
+qinggu:qinggukeji
+复制代码
+保存退出！同时，修改该文件的权限为600：
+linuser@node02:~$ sudo chmod 600 /etc/rsync.password
+复制代码
+
+4、根据rsyncd.conf 文件的配置，创建数据同步存放目录/data/10.211.55.7：
+linuser@node02:~$ sudo mkdir -p /data/10.211.55.7
+复制代码
+
+5、以守护方式启动rsync 服务：
+linuser@node02:~$ sudo rsync --daemon
+复制代码
+
+启动后，查看启动是否有监听rsync 进程：
+linuser@node02:~$ ps aux|grep rsync
+root      1484  0.0  0.2  17704  2056 ?        Ss   16:50   0:00 rsync --daemon
+linuser   1486  0.0  0.2  13428  2288 pts/0    S+   16:51   0:00 grep --color=auto rsync
+复制代码
+
+查看监听的端口：
+linuser@node02:~$ sudo netstat -lnp |grep rsync
+tcp        0      0 0.0.0.0:873             0.0.0.0:*               LISTEN      1484/rsync
+tcp6       0      0 :::873                  :::*                    LISTEN      1484/rsync
+复制代码
+
+确认有生产pid 和log 文件：
+linuser@node02:~$ ls /var/run/rsyncd.pid
+/var/run/rsyncd.pid
+linuser@node02:~$ ls /var/log/rsyncd.log
+/var/log/rsyncd.log
+复制代码
+
+6、开启防火墙的873端口：
+linuser@node02:~$ sudo ufw enable
+Command may disrupt existing ssh connections. Proceed with operation (y|n)? y
+Firewall is active and enabled on system startup
+
+linuser@node02:~$ sudo ufw allow proto tcp from 10.211.55.7 to 10.211.55.8 port 873
+Rule added
+复制代码
+
+查看防火墙状态：
+linuser@node02:~$ sudo ufw status
+Status: active
+
+To                         Action      From
+--                         ------      ----
+10.211.55.8 22/tcp         ALLOW       192.168.7.150
+10.211.55.8 873/tcp        ALLOW       10.211.55.7
+复制代码
+
+第二部分：110.211.55.7        Linux node01.com 数据发送端 rsync + sersync2 的配置
+
+1、确认安装了rsync：
+linuser@node01:~$ dpkg -s rsync
+Package: rsync
+Status: install ok installed
+Priority: optional
+..........................省略..........................
+复制代码
+
+2、在 /etc 目录下新建接收端配置的虚拟用户的密码文件rsync.password文件：
+linuser@node01:~$ sudo vim /etc/rsync.password
+复制代码
+内容如下：
+qinggukeji
+复制代码
+保存退出！同时修改该文件的权限为600：
+linuser@node01:~$ sudo chmod 600 !$
+sudo chmod 600 /etc/rsync.password
+复制代码
+
+到此为止。简单的数据同步服务已经搭建完成，只不过还只能通过手动来进行同步。下面来测试手动同步文件试试：
+
+1、同步/var/log 目录下的所有文件到接收端：
+linuser@node01:~$ sudo rsync -avzP /var/log/* qinggu@10.211.55.8::data --password-file=/etc/rsync.password
+sending incremental file list
+alternatives.log
+         20,183 100%    0.00kB/s    0:00:00 (xfr#1, to-chk=56/57)
+auth.log
+         21,266 100%   20.28MB/s    0:00:00 (xfr#2, to-chk=55/57)
+boot.log
+          3,433 100%    3.27MB/s    0:00:00 (xfr#3, to-chk=54/57)
+bootstrap.log
+         61,499 100%   19.55MB/s    0:00:00 (xfr#4, to-chk=53/57)
+btmp
+          1,152 100%  281.25kB/s    0:00:00 (xfr#5, to-chk=52/57)
+dmesg
+         46,636 100%    8.90MB/s    0:00:00 (xfr#6, to-chk=51/57)
+dmesg.0
+         46,667 100%    6.36MB/s    0:00:00 (xfr#7, to-chk=50/57)
+dmesg.1.gz
+         12,881 100%    1.54MB/s    0:00:00 (xfr#8, to-chk=49/57)
+dmesg.2.gz
+..........................省略..........................
+sent 5,183,778 bytes  received 1,007 bytes  3,456,523.33 bytes/sec
+total size is 18,024,566  speedup is 3.48
+复制代码
+
+2、登陆接收端，查看 /data/10.211.55.7 目录下是否有同步过来的日志文件：
+linuser@node02:~$ ls /data/10.211.55.7/
+alternatives.log  bootstrap.log  dmesg.0     dmesg.4.gz      fsck       lastlog              upstart
+apt               btmp           dmesg.1.gz  dpkg.log        installer  syslog               wtmp
+auth.log          dist-upgrade   dmesg.2.gz  faillog         kern.log   udev
+boot.log          dmesg          dmesg.3.gz  fontconfig.log  landscape  unattended-upgrades
+复制代码
+
+3、远程同步删除。现在分发服务器上新建一个空目录 test:
+linuser@node01:~$ mkdir test
+复制代码
+加--delete 参数同步 test 目录下的数据到接收端：
+linuser@node01:~$ sudo rsync -avz --delete /home/linuser/test/ qinggu@10.211.55.8::data --password-file=/etc/rsync.password
+sending incremental file list
+deleting upstart/ureadahead.log
+deleting upstart/ureadahead-other.log
+deleting upstart/systemd-logind.log
+deleting upstart/rsyslog.log
+..........................省略..........................
+deleting auth.log
+deleting alternatives.log
+./
+
+sent 69 bytes  received 1,233 bytes  2,604.00 bytes/sec
+total size is 0  speedup is 0.00
+复制代码
+
+4、查看接受到 /data/10.211.55.7 上是否还有数据：
+linuser@node02:~$ sudo ls /data/10.211.55.7/
+linuser@node02:~$
+复制代码
+
+接下来下载安装自动同步工具sersync ：
+
+1、下载sersync  到/usr/local/src 目录下：目前由于国内太坑，google code 项目被墙，这里我上传至了自己的论坛：sersync2.5.4_64bit_binary_stable_final.tar.gz
+linuser@node01:~$ sudo wget -O /usr/local/src/serrsync.tar.gz https://sersync.googlecode.com/files/sersync2.5.4_64bit_binary_stable_final.tar.gz
+复制代码
+
+2、解压到下载目录：
+linuser@node01:~$ sudo tar -zxf /usr/local/src/serrsync.tar.gz -C /usr/local/src/
+复制代码
+
+3、将解压的文件移动到/usr/local/ 目录下并重命名为sersync:
+linuser@node01:~$ sudo mv /usr/local/src/GNU-Linux-x86 /usr/local/sersync
+复制代码
+
+4、备份主配置文件：
+linuser@node01:~$ sudo cp /usr/local/sersync/confxml.xml /usr/local/sersync/confxml.xml.bak
+复制代码
+
+5、将可执行文件sersync2 拷贝至 /usr/sbin 目录：
+linuser@node01:~$ sudo cp /usr/local/sersync/sersync2 /usr/sbin/
+复制代码
+
+6、编辑sersync 的配置文件confxml.xml 文件：
+linuser@node01:~$ sudo vim /usr/local/sersync/confxml.xml
+复制代码
+
+找打文件的第4行，将debug 启用（对于第一次配置这种服务的同学特别需要这个来调试错误）
+<debug start="true"/>
+复制代码
+
+找到文件的24行，修该本地数据同步的目录：
+<localpath watch="/home/linuser/test">
+复制代码
+
+找到文件的25行，修改远程服务器IP 及 远端定义的数据同步模块：
+<remote ip="10.211.55.8" name="data"/>
+复制代码
+
+找到31 行，修改验证登陆信息：
+<auth start="false" users="qinggu" passwordfile="/etc/rsync.password"/>
+复制代码
+保存退出！
+
+7、启动sersync2:
+linuser@node01:~$ sudo sersync2 -d -n 3 -o /usr/local/sersync/confxml.xml >> sudo /var/log/sersync2.log 2>&1
+linuser@node01:~$ ps aux|grep sersync
+root      1844  0.0  0.1  34964  1328 ?        Ssl  18:03   0:00 sersync2 -d -n 3 -o /usr/local/sersync/confxml.xml /var/log/sersync2.log
+linuser   1905  0.0  0.2  13428  2264 pts/0    S+   18:04   0:00 grep --color=auto sersync
+复制代码
+启动参数说明：
+_______________________________________________________
+参数-d:启用守护进程模式
+参数-r:在监控前，将监控目录与远程主机用rsync命令推送一遍
+c参数-n: 指定开启守护线程的数量，默认为10个
+参数-o:指定配置文件，默认使用confxml.xml文件
+参数-m:单独启用其他模块，使用 -m refreshCDN 开启刷新CDN模块
+参数-m:单独启用其他模块，使用 -m socket 开启socket模块
+参数-m:单独启用其他模块，使用 -m http 开启http模块
+不加-m参数，则默认执行同步程序
+________________________________________________________________
+复制代码
+
+8、测试。由上面手动测试数据同步可知，分发端的数据目录 test  目录  和接收端的数据同步目录 /data/10.211.55.7 下都没数据。现在我手动在分发端的test 创建几个空目录，查看同步状态：
+linuser@node01:~$ mkdir test/{A1,B2,C3,D4}
+复制代码
+
+在接收端node02.com 上查看：
+linuser@node02:~$ sudo ls /data/10.211.55.7/
+A1  B2  C3  D4
+复制代码
+
+测试从本地删除文件：
+linuser@node01:~$ rm -rf test/B2
+linuser@node01:~$ ls test/
+A1  C3  D4
+复制代码
+在接收端node02.com 上查看：
+linuser@node02:~$ sudo ls /data/10.211.55.7/
+A1  C3  D4
+复制代码
