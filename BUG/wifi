@@ -1,0 +1,18 @@
+安装ubuntu14.04，设置完上网配置后，总是弹出输入用户名密码窗口，连不上网络。
+
+有问题只能通过分析日志解决
+less -100f /var/log/syslog
+里面有networkmanager的日志，只是看到授权失败。
+google搜索失败的错误码，发现原来这个是ubuntu上networkmanager的bug
+
+在连接WPA2/PEAP/MSCHAPv2这种类型的wifi时，连接网络选择忽略证书后，仍然去验证证书。
+对于没有证书wifi自然会连接失败。
+
+解决办法：
+cd /etc/NetworkManager/system-connections/
+这个目录下面，有个以你连接的wifi的名字命名的文件，
+用编辑器打开你要连接的wifi，找到这句：
+system-ca-certs=true
+把它的值true改成false。
+重新连接wifi即可。
+
