@@ -1,0 +1,46 @@
+2.7. 网络类型
+
+
+2.7.1. 物理（phys）网络
+
+指定一个物理接口作为容器网络使用：
+lxc.network.type = phys
+lxc.network.flags = up
+lxc.network.link = eth0
+lxc.network.hwaddr = 4a:49:43:49:79:ff
+lxc.network.ipv4 = 10.10.95.87/24
+lxc.network.ipv6 = 2003:db8:1:0:214:1234:fe0b:3297
+优点：配置简单
+缺点：网卡资源有限
+
+2.7.2. 配置桥接（veth）网络
+
+veth (virtual ethernet)宿主需要开启桥接模式，配置如下：添加桥接网卡
+# vim ifcfg-br0
+DEVICE="br0"
+ONBOOT="yes"
+TYPE="Bridge"
+BOOTPROTO="static"
+IPADDR="192.168.108.176"
+NETMASK="255.255.252.0"
+GATEWAY="192.168.111.254"
+修改eth0网卡
+
+# vim ifcfg-eth0
+DEVICE="eth0"
+BRIDGE="br0"
+ONBOOT="yes"
+BOOTPROTO="none"
+NM_CONTROLLED="no"
+TYPE="Ethernet"
+HWADDR="00:16:3E:47:3E:D4"
+Lxc的配置文件格式如下：
+
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.link=br0
+lxc.network.veth.pair= vethxxx（最多15个字符）
+lxc.network.hwaddr= 00:16:3e:77:52:20
+lxc.network.ipv4 = 10.11.6.225/24
+lxc.network.name = eth0
+启动后宿主会增加一个vethxxx的网卡，容器通过这个网卡连接到宿主的网桥上通信。
