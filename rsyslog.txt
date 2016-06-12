@@ -1,0 +1,54 @@
+使用 rsyslog 将 nginx log 同步到一台机器
+Posted by suren on	2015/11/19 Leave a comment (0)Go to comments
+nginx 每天会产生大量日志，对系统和业务分析很有用。 生产环境一般有多台 web 服务器，分担压力和避免单点故障，这种情况下，很难快速定位到需要的信息在哪些机器上。
+当然，有高大上的方法，比如 elasticsearch + kibana，但这些方法比较吃机器性能，有没有简单粗暴的办法呢。
+如果不需要将查 log 玩出花，归并 log 到一台机器是个好办法，况且现在硬盘也很便宜。
+rsyslog 是一个简单同步的工具，支持 UDP TCP，内网下很好。和 nginx log 集成的方式，有 2 种，一种是直接在 nginx 配置种写 syslog 的协议，但需要 1.7 以上版本支持；另一种，可以根据已有 log 文件的变化，做增量同步，对 nginx 版本没有限制，理论上可以同步所有 log。这次介绍的是后者。
+
+以 ubuntu 为例，先看服务端的配置。
+
+修改 /etc/rsyslog.conf
+
+$ModLoad immark # 去掉前面的注视符号
+$ModLoad imtcp  # 去掉前面的注视符号，表示接受指定端口来的 tcp 信息
+$InputTCPServerRun 10514 # 设定端口号，默认的 514 打开不了，我换成了 10514
+在 /etc/rsyslog.d/ 下添加一个配置文件 40-nginx.conf
+
+$template filename, "/path/to/log/%PROGRAMNAME%_%$year%_%$month%_%$day%.log"
+$template format, "%FROMHOST% -%msg%\n"
+:syslogtag,startswith,"nginx" ?filename;format
+:syslogtag,startswith,"nginx" ~
+第一行定义了文件名格式。PROGRAMNAME 是 tag 名称，后面会由客户端指定。
+第二行定义里 log 格式，为了区分来自哪台机器，我加了 FROMHOST。要注意的是，必须在 /ets/hosts 中事说明对应 host 的名称，否则 log 中不会出现机器名称。
+第三行说明 tag 以 nginx 开头的 log，以上面定义的 format 格式，存到 filename 格式的文件中。
+第四行防止将 log 存放到 /var/log/syslog 中
+保存后重启一下
+
+sudo service rsyslog restart
+客户端配置
+在 /etc/rsyslog.d/ 下添加一个配置文件 40-nginx.conf
+
+$ModLoad imfile
+ 
+$InputFileName          /path/to/nginx/access/log
+$InputFileTag           nginx_access_log:
+$InputFileStateFile     stat-nginx-access
+$InputFileSeverity      info
+$InputFileFacility      local7
+$InputRunFileMonitor
+ 
+$InputFilePollInterval  5
+ 
+:syslogtag,startswith,"nginx" @@host_ip:host_port
+:syslogtag,startswith,"nginx" ~
+第一行表示从文件同步。
+第三行说明需要同步的文件。
+第四行说明传到服务端的 tag。
+第五行是 rsyslog 用来标记文件同步位置的文件，每台客户端唯一。
+InputFilePollInterval 说明同步间隔，单位是秒。
+最后第二行和服务端类似，只是说明 log 上传服务端的 ip 和端口。两个 @ 符号，表示使用 tcp 协议。
+保存后重启客户端 rsyslog。
+
+这样就完成了整个配置。
+
+好处如上所说，可以在同一个地方查看日志，现在发现一个缺点，多个服务器日志的顺序，会有错乱，原因和客户端不是及时上传 log 有关(节省网络开销)，如果 nginx 写入 log 时有 buffer，也会加剧这个问题。但错位问题不严重，目前的分析中，也可以容忍错位，因此不解决了。
