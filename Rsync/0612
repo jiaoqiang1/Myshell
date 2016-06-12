@@ -1,0 +1,137 @@
+rsync实现文件同步
+
+rsync是类unix系统下的数据镜像备份工工具，一般linux系统都自带了 [可以确认一下：shell>rpm -qa|grep rsync]
+
+服务端：192.168.1.2  同步目录：/home/source
+
+客户端：192.168.1.3  同步目录：/home/receive
+
+1、服务端配置
+
+shell>vi /etc/rsyncd.conf   #创建配置文件rsyncd.conf
+
+配置文件内容：
+
+uid=nobody
+gid=nobody
+use chroot = no
+max connections = 10
+pid file = /var/run/rsyncde.pid
+lock file = /var/run/rsync.lock
+log file = /var/log/rsyncd.log
+Timeout = 300
+Log format = %t %a %m %f %b
+[backup]
+path=/a/system_build/leia/
+ignore errors
+read only = yes
+list = no
+auth users = rsync
+secrets file = /etc/rsyncd.secrets
+hosts allow = 9.115.249.158
+hosts deny = 0.0.0.0/0
+　　
+
+shell>vi etc/rsyncd.secrets #创建密码文件
+
+内容：
+
+rsync:rsync //这里用户名和密码都定义为rsync
+shell>chmod 0600 /etc/rsyncd.secrets  #更改密码文件权限
+
+shell>rsync --daemon;  #启动服务,默认在873端口监听(可以自己修改)  or  /usr/bin/rsync --daemon
+
+ 
+
+检查进程是否存在，
+
+ps -aux |grep rsync
+root      4406  0.0  0.0   4228   588 ?        Ss   May14   0:00 /usr/local/bin/rsync --daemon
+netstat -an |grep 873
+tcp        0      0 0.0.0.0:873                 0.0.0.0:*                   LISTEN
+出现以上结果，表明rsync服务器端已经启动。
+
+ 
+
+打开防火墙
+
+iptables -i INPUT -p tcp --dport 873 -j ACCEPT
+iptables -L
+结果如下
+Chain INPUT (policy ACCEPT)
+target prot opt source destination
+ACCEPT tcp -- anywhere anywhere tcp dpt:rsync
+
+ 
+
+rsync开机启动
+echo "/usr/bin/rsync --daemon" >> /etc/rc.local
+
+(开机自动启动rsync服务)
+
+注意事项
+1） 提示密码文件不能读，需要手工输入密码时，可能就是密码文件权限不是600，或者格式不对，或者是路径不对。
+2） 提示要创建新目录或文件传输失败时，可能是欲同步的目录没有权限，最好把欲同步的目录权限修改为744。
+3） 从客户端同步文件到服务端时，最好单个文件目录传输，否则易出错。
+
+ 
+
+2、客户端
+
+客户端就不用启动rsync服务了
+
+shell>vi /etc/rsyncd.secrets #这里也是创建密码文件，文件名字自定义，但内容只需要填目标服务授权密码
+
+内容：
+
+rsync //这里是服务端rsync服务授权密码
+shell>chmod 0600 /etc/rsyncd.secrets #更改文件权限
+
+ 
+
+测试：(在服务端/home/source/ 先创建test文件 )
+
+shell>rsync -vzrtopg --delete --progress --password-file=/etc/rsyncd.secrets rsync@192.168.1.2::backup /home/receive
+
+v:传输时的进度等信息, z:表示压缩, r:是递归, t:保持文件原有时间, o:保持文件原有属主, P:传输进度, g:保持文件原有用户组
+--progress 指显示
+
+--delete 指如果服务器端删除了这一文件，那么客户端也相应把文件删除，保持真正的一致
+
+--password-file=/etc/rsyncd.secrets 认证密码
+
+rsync 认证用户
+
+backup 认证模块
+
+如果客户端/home/receive/下产生了test文件代表同步成功
+
+下一步写一个脚本文件实现真正的同步......
+
+启动脚本：rsync.sh 
+
+shell>vi /home/rsync.sh
+
+#!/bin/sh
+rsync -vzrtopg --delete --progress --password-file=/etc/rsyncd.secrets rsync@192.168.1.2::backup /home/receive
+关闭脚本：killrsync.sh
+
+shell>vi /home/killrsync.sh
+
+#!/bin/sh
+RSYNC_PID=`ps auxww|grep rsync |grep -v grep|awk '{print $2}'`
+kill -9 $RSYNC_PID
+设置定时任务 (crontab？google can help you！)
+
+shell>crontab -e
+
+SHELL=/bin/sh
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=root
+0 3 * * *  /home/rsync.sh  //每天晚上3点执行一次同步
+0 6 * * *  /home/killrsync.sh //每天早上6点强制终止同步(如果还没完成)
+shell>crontab -l #可以查看任务设置情况
+
+shell>service crond status #查看crond是否已启动，若启动了能看到PID
+
+shell>service crond start #启动crond服务
