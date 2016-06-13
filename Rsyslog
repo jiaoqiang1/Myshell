@@ -1,0 +1,510 @@
+Rsyslog配置文件详解
+
+dandan.fs 发布于 2年前，共有 3 条评论
+
+rsyslog服务和logrotate服务
+======================================================================
+rsyslog 是一个 syslogd 的多线程增强版。
+现在Fedora和Ubuntu, rhel6默认的日志系统都是rsyslog了
+rsyslog负责写入日志, logrotate负责备份和删除旧日志, 以及更新日志文件
+———————————————————————-
+rsyslog 服务
+———————————————————————-
+软件包:
+[root@centos ~]# yum install rsyslog rsyslog-mysql  logrotate
+查看当前rsyslog服务的状态:
+[root@centos ~]#/etc/init.d/rsyslog status
+rsyslogd (pid  1343) is running…
+在centos6中, rsyslog服务默认是开机启动的
+我们先看一下它的进程::
+[root@centos ~]# ps -ef | grep rsyslogd | grep -v grep
+root      1343    1  0 12:09 ?        00:00:00 /sbin/rsyslogd -c 4
+从上面命令的输出结果看到rsyslog执行时使用的参数是-c 4.
+它的意思是指定rsyslog运行(兼容)的版本号, 这个参数必须是第一个参数, 当然也可以省略, 默认为-c0, (命令行兼容sysklogd)
+这个参数是在文件/etc/sysconfig/rsyslog中指定::
+[root@centos ~]# cat /etc/sysconfig/rsyslog
+
+# Options to syslogd
+
+# syslogd options are deprecated since rsyslog v3
+
+# if you want to use them, switch to compatibility mode 2 by “-c 2″
+
+SYSLOGD_OPTIONS=”-c 4″  
+
+[root@centos ~]# chkconfig –list | grep rsyslog
+rsyslog         0:off   1:off   2:on    3:on    4:on    5:on    6:off
+注意，这里的服务名是rsyslog!
+———————————————————————-
+配置文件
+———————————————————————-
+/etc/rsyslog.conf
+配置文件的基本信息
+配置文件中有很多内容, 但最主要的是指定需要记录哪些服务和需要记录什么等级的信息::
+cat /etc/rsyslog.conf
+
+#rsyslog v3 config file
+
+# if you experience problems, check
+
+# http://www.rsyslog.com/troubleshoot for assistance
+
+#### MODULES ####    加载 模块
+
+$ModLoad imuxsock.so  –> 模块名    # provides support for local system logging (e.g. via logger command) 本地系统日志
+
+$ModLoad imklog.so                    # provides kernel logging support (previously done by rklogd)
+
+#$ModLoad immark.so              # provides –MARK– message capability
+
+# Provides UDP syslog reception
+
+# 允许514端口接收使用UDP协议转发过来的日志
+
+#$ModLoad imudp.so
+
+#$UDPServerRun 514
+
+# Provides TCP syslog reception
+
+# 允许514端口接收使用TCP协议转发过来的日志
+
+#$ModLoad imtcp.so
+
+#$InputTCPServerRun 514
+
+#### GLOBAL DIRECTIVES ####
+
+定义日志格式默认模板  
+
+# Use default timestamp format
+
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat  
+
+# File syncing capability is disabled by default. This feature is usually not required,
+
+# not useful and an extreme performance hit
+
+#$ActionFileEnableSync on
+
+#### RULES ####
+
+# Log all kernel messages to the console.
+
+# Logging much else clutters up the screen.
+
+#kern.*                                                 /dev/console    关于内核的所有日志都放到/dev/console(控制台)
+
+# Log anything (except mail) of level info or higher.
+
+# Don’t log private authentication messages!
+
+# 记录所有日志类型的info级别以及大于info级别的信息到/var/log/messages，但是mail邮件信息，authpriv验证方面的信息和cron时间任务相关的信息除外
+
+*.info;mail.none;authpriv.none;cron.none                /var/log/messages  
+
+# The authpriv file has restricted access.
+
+# authpriv验证相关的所有信息存放在/var/log/secure
+
+authpriv.*                                              /var/log/secure  
+
+# Log all the mail messages in one place.
+
+# 邮件的所有信息存放在/var/log/maillog; 这里有一个-符号, 表示是使用异步的方式记录, 因为日志一般会比较大
+
+mail.*                                                  -/var/log/maillog  
+
+# Log cron stuff
+
+# 计划任务有关的信息存放在/var/log/cron
+
+cron.*                                                  /var/log/cron  
+
+# Everybody gets emergency messages
+
+# 记录所有的大于等于emerg级别信息, 以wall方式发送给每个登录到系统的人
+
+*.emerg                                                 *                  *代表所有在线用户  
+
+# Save news errors of level crit and higher in a special file.
+
+# 记录uucp,news.crit等存放在/var/log/spooler
+
+uucp,news.crit                                          /var/log/spooler  
+
+# Save boot messages also to boot.log     启动的相关信息
+
+local7.*                                                /var/log/boot.log
+
+#:rawmsg, contains, “sdns_log” @@192.168.56.7:10514
+
+#:rawmsg, contains, “sdns_log” ~
+
+# ### begin forwarding rule ###  转发规则
+
+# The statement between the begin … end define a SINGLE forwarding
+
+# rule. They belong together, do NOT split them. If you create multiple
+
+# forwarding rules, duplicate the whole block!
+
+# Remote Logging (we use TCP for reliable delivery)
+
+#
+
+# An on-disk queue is created for this action. If the remote host is
+
+# down, messages are spooled to disk and sent when it is up again.
+
+#$WorkDirectory /var/spppl/rsyslog # where to place spool files
+
+#$ActionQueueFileName fwdRule1 # unique name prefix for spool files
+
+#$ActionQueueMaxDiskSpace 1g   # 1gb space limit (use as much as possible)
+
+#$ActionQueueSaveOnShutdown on # save messages to disk on shutdown
+
+#$ActionQueueType LinkedList   # run asynchronously
+
+#$ActionResumeRetryCount -1    # infinite retries if host is down
+
+# remote host is: name/ip:port, e.g. 192.168.0.1:514, port optional
+
+#*.* @@remote-host:514                    # @@表示通过tcp协议发送    @表示通过udp进行转发
+
+#local3.info  @@localhost :514
+
+#local7.*                                    #            @@192.168.56.7:514
+
+# ### end of the forwarding rule ###
+
+格式::
+日志设备(类型).(连接符号)日志级别   日志处理方式(action)
+日志设备(可以理解为日志类型):
+———————————————————————-
+auth        –pam产生的日志
+authpriv    –ssh,ftp等登录信息的验证信息
+cron        –时间任务相关
+kern        –内核
+lpr         –打印
+mail        –邮件
+mark(syslog)–rsyslog服务内部的信息,时间标识
+news        –新闻组
+user        –用户程序产生的相关信息
+uucp        –unix to unix copy, unix主机之间相关的通讯
+local 1~7   –自定义的日志设备
+日志级别:
+———————————————————————-
+debug       –有调式信息的，日志信息最多
+info        –一般信息的日志，最常用
+notice      –最具有重要性的普通条件的信息
+warning     –警告级别
+err         –错误级别，阻止某个功能或者模块不能正常工作的信息
+crit        –严重级别，阻止整个系统或者整个软件不能正常工作的信息
+alert       –需要立刻修改的信息
+emerg       –内核崩溃等严重信息
+none        –什么都不记录
+从上到下，级别从低到高，记录的信息越来越少
+详细的可以查看手册: man 3 syslog
+连接符号
+———————————————————————-
+.xxx: 表示大于等于xxx级别的信息
+.=xxx：表示等于xxx级别的信息
+.!xxx：表示在xxx之外的等级的信息
+Actions
+———————————————————————-
+1. 记录到普通文件或设备文件::
+*.*     /var/log/file.log   # 绝对路径
+*.*     /dev/pts/0
+测试: logger -p local3.info ‘KadeFor is testing the rsyslog and logger ‘   logger 命令用于产生日志
+2. 转发到远程::
+*.* @192.168.0.1            # 使用UDP协议转发到192.168.0.1的514(默认)端口
+*.* @@192.168.0.1:10514     # 使用TCP协议转发到192.168.0.1的10514(默认)端口
+3. 发送给用户(需要在线才能收到)::
+*.*   root
+*.*   root,kadefor,up01     # 使用,号分隔多个用户
+*.*   *     # *号表示所有在线用户
+4. 忽略,丢弃::
+local3.*   ~    # 忽略所有local3类型的所有级别的日志
+5. 执行脚本::
+local3.*    ^/tmp/a.sh      # ^号后跟可执行脚本或程序的绝对路径
+# 日志内容可以作为脚本的第一个参数.
+# 可用来触发报警
+.. note::
+日志记录的顺序有先后关系!
+======================================================================
+一个标准的简单的配置文件
+======================================================================
+::
+*.info;mail.none;authpriv.none;cron.none      /var/log/messages
+authpriv.*                                    /var/log/secure
+mail.*                                        /var/log/maillog
+cron.*                                        /var/log/cron
+*.emerg                                       *
+uucp,news.crit                                /var/log/spooler
+local7.*                                      /var/log/boot.log
+======================================================================
+实例: 指定日志文件, 或者终端
+======================================================================
+[root@kadefor ule-sa3]# vi /etc/rsyslog.conf
+[root@kadefor ule-sa3]# grep local3 !$
+grep local3 /etc/rsyslog.conf
+local3.*                                                /var/log/local3.log
+[root@kadefor ule-sa3]# rm -rf /var/log/local3.log
+[root@kadefor ule-sa3]# /etc/init.d/rsyslog reload
+Reloading system logger…                                 [  OK  ]
+[root@kadefor ule-sa3]# ls /var/log/local3.log
+/var/log/local3.log
+[root@kadefor ule-sa3]# logger -t ‘LogTest’ -p local3.info ‘KadeFor is testing the rsyslog and logger’
+[root@kadefor ule-sa3]# cat /var/log/local3.log
+Jun 10 04:55:52 kadefor LogTest: KadeFor is testing the rsyslog and logger
+[root@kadefor ule-sa3]#
+自己实验日志发送给某个终端
+======================================================================
+实例:  过滤特定的日志到文件, 忽略(丢弃)包含某个字符串的日志
+======================================================================
+# 过滤日志, 由:号开头
+:msg, contains, “error” /var/log/error.log
+:msg, contains, “error” ~         # 忽略包含error的日志
+:msg, contains, “user nagios”   ~
+:msg, contains, “user kadefor”   ~
+:msg, contains, “module-alsa-sink.c: ALSA woke us up to write new data to the device, but there was actually nothing to write” ~
+local3.*    ~
+PS.
+&   ~       # 忽略所有的日志
+把包含’oracle’的日志保存在/var/log/oracle.log
+======================================================================
+实例:  使用模板来定义日志格式
+======================================================================
+定义默认的日志格式:
+
+$template myFormat,”%rawmsg%\n”  
+
+$ActionFileDefaultTemplate myFormat  
+
+#如果不要$ActionFileDefaultTemplate myFormat这一行, 就需要像这样来使用模板:
+
+#在日志文件后添加模板名, 并用;号分隔
+
+$template myFormat,”%rawmsg%\n”  
+
+# The authpriv file has restricted access.
+
+authpriv.*      /var/log/secure;myFormat  
+
+# Log all the mail messages in one place.
+
+mail.*          /var/log/maillog;myFormat  
+
+# Log cron stuff
+
+cron.*          /var/log/cron;myFormat  
+
+# Everybody gets emergency messages
+
+*.emerg                                       *  
+
+# Save news errors of level crit and higher in a special file.
+
+uucp,news.crit  /var/log/spooler;myFormat  
+
+# Save boot messages also to boot.log
+
+local7.*        /var/log/boot.log;myFormat  
+
+======================================================================
+实例: remote log 远程发送与接收:
+======================================================================
+如果要修改为非514的端口, 需要设置selinux
+只要在rsyslog.conf中加入
+*.* @192.168.0.10
+*.* @192.168.0.10:10514     # 带端口号
+*.* @@192.168.0.10      # TCP
+但是没有定义保存在远程的哪一个文件啊?
+其实保存在什么文件, 那是远程日志服务器接收到日志之后它自己的事情了.
+例1:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+———————————————————————-
+Client(send):
+———————————————————————-
+::
+local3.*   @@192.0.2.1:10514
+# if you need to forward to other systems as well, just
+# add additional config lines:
+# *.*   @@other-server.example.net:10514
+# Log anything (except mail) of level info or higher.
+# Don’t log private authentication messages!
+*.info;mail.none;authpriv.none;cron.none      /var/log/messages
+# The authpriv file has restricted access.
+authpriv.*                                    /var/log/secure
+# Log all the mail messages in one place.
+mail.*                                        /var/log/maillog
+# Log cron stuff
+cron.*                                        /var/log/cron
+# Everybody gets emergency messages
+*.emerg                                       *
+# Save news errors of level crit and higher in a special file.
+uucp,news.crit                                /var/log/spooler
+# Save boot messages also to boot.log
+local7.*                                      /var/log/boot.log
+———————————————————————-
+Server(receive): <1>
+———————————————————————-
+::
+# for TCP use:
+$modload imtcp
+$InputTCPServerRun 10514
+# for UDP use:
+$modload imudp
+$UDPServerRun 514
+# Log anything (except mail) of level info or higher.
+# Don’t log private authentication messages!
+*.info;mail.none;authpriv.none;cron.none      /var/log/messages
+# The authpriv file has restricted access.
+authpriv.*                                    /var/log/secure
+# Log all the mail messages in one place.
+mail.*                                        /var/log/maillog
+# Log cron stuff
+cron.*                                        /var/log/cron
+# Everybody gets emergency messages
+*.emerg                                       *
+# Save news errors of level crit and higher in a special file.
+uucp,news.crit                                /var/log/spooler
+# Save boot messages also to boot.log
+local7.*                                      /var/log/boot.log
+local3.*    /var/log/local3.log     # 测试用
+例2 (仅做了解, 不做要求)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#配置服务端(接收)
+———————————————————————-
+vi /etc/rsyslog.conf        #在文件开始加上，同时确保514端口能够被客户端用tcp访问
+$ModLoad imtcp.so              # needs to be done just once #使用tcp方式
+$InputTCPMaxSessions 500    # tcp接收连接数为500个
+$InputTCPServerRun 514      # tcp接收信息的端口
+$template logformat,”%TIMESTAMP:::date-mysql% %FROMHOST-IP%%msg%\n”     # 定义一个名为logformat模板, 为信息加上日志时间
+$template DynFile,”/var/log/tlog%$year%%$month%%$day%.log”     # 定义日志文件的名称，按照年月日
+:rawmsg, contains, “sdns_log” ?DynFile;logformat    # 把rawmsg(也可以使用msg)日志中包含sdns_log标志的信息写到DynFile定义的日志文件里
+:rawmsg, contains, “sdns_log”  ~                     # 这个表示丢弃包含sdns_log标志的信息, 一般都加上它, 以免多个日志文件记录重复的日志
+#配置客户端(发送)
+———————————————————————-
+vi /etc/rsyslog.conf  #在文件开始加上
+#把包含sdns_log的信息通过tcp发到192.168.1.2 @@表示tcp @表示udp
+:rawmsg, contains, “sdns_log”       @@192.168.1.2       # 默认514端口
+#这个表示丢弃包含sdns_log标志的信息,防止这个信息写到本机的/var/log/message
+:rawmsg, contains, “sdns_log”       ~
+#测试
+———————————————————————-
+在客户端上执行
+logger -p user.info “sdns_log 34334″
+在服务端的/var/log/目录里是否有tlog*日志产生
+补充:
+———————————————————————-
+如果要把不同服务器发送过来的日志保存到不同的文件, 可以这样操作:
+:fromhost-ip, isequal, “192.168.0.160″ /var/log/host160.log
+:FROMHOST-IP, isequal, “192.168.0.161″ /var/log/host161.log
+:FROMHOST-IP, startswith, “192.168.1.” /var/log/network1.log
+:FROMHOST-IP, startswith, “192.168.2.” /var/log/network2.log
+练习:
+======================================================================
+1. 实现把ssh服务的日志自定义保存到/var/log/newsshd.log (先不做)
+2. mail日志保存在远程日志服务器/var/log/newmail.log
+3. 过滤日志, 如果日志包含有”daydayup”, 则执行脚本/tmp/a.sh
+脚本内容:
+#!/bin/bash
+echo  “KO::** $1″ > /dev/tty2
+======================================================================
+logrotate服务
+======================================================================
+rotate 轮换,日志切换
+logrotate服务的启动方式
+logrotate是一个日志管理程序，用来把旧的日志文件删除（备份），并创建新的日志文件，这个过程称为“转储”。我们可以根据日志的大小，或者根据其使用的天数来转储。
+logrotate 的执行由crond服务实现。在/etc/cron.daily目录中，有个文件logrotate，它实际上是个shell script，用来启动logrotate。logrotate程序每天由cron在指定的时间（/etc/crontab）启动。
+因此，使用ps是无法查看到logrotate的。如果它没有起来，就要查看一下crond服务有没有在运行。
+在执行logrotate时，需要指定其配置文件/etc/logrotate.conf
+这 个配置文件的注释写得很清楚，没有必要再罗嗦了。只想强调下面这行，它的作用包含存放在/etc/logrotate.d目录下面的配置文件，不可或缺。 如果你安装了一个新的服务，它的日志转储的规则可以建立一个专门的配置文件，放在/etc/logrotate.d下面。它其实也因为下面的这句话，在 logrotate服务启动时被读取。
+每个存放在/etc/logrotate.d目录里的文件，都有上面格式的配置信息。在{}中定义的规则，如果与logrotate.conf中的冲突，以/etc/logrotatate.d/中的文件定义的为准。
+logrotate启动脚本放在 /etc/cron.daily/logrotate 中，可人工执行命令进行测试：
+/usr/sbin/logrotate -f /etc/logrotate.conf
+dateext表示转储文件会以日期来结束*
+::
+[root@kadefor log]# vim /etc/logrotate.conf
+# see “man logrotate” for details
+# rotate log files weekly
+weekly          –每周轮转一次
+# keep 4 weeks worth of backlogs
+rotate 4        –保留四个
+# create new (empty) log files after rotating old ones
+create          –rotate后，创建一个新的空文件
+# uncomment this if you want your log files compressed
+#compress       –默认是不压缩的
+# RPM packages drop log rotation information into this directory
+include /etc/logrotate.d        –这个目录下面配置文件生效
+# no packages own wtmp — we’ll rotate them here
+/var/log/wtmp {             –定义/var/log/wtmp这个日志文件
+monthly                 –每月轮转一次，取代了上面的全局设定的每周轮转一次
+minsize 1M              –定义日志必须要大于1M大小才会去轮转
+create 0664 root utmp   –新的日志文件的权限，属主，属主
+rotate 1                –保留一个，取代了上面的全局设定的保留四个
+}
+/var/log/btmp {
+missingok       –如果日志丢失, 不报错
+monthly
+create 0600 root utmp
+rotate 1
+}
+::
+# sample logrotate configuration file
+compress
+# 全局设置, 压缩
+/var/log/messages {
+rotate 5     # 保留5份日志
+weekly       # 每周轮换一次
+postrotate   # 轮换之后重启syslogd服务
+/usr/bin/killall -HUP syslogd
+# rhel6中为:/bin/kill -HUP `cat /var/run/syslogd.pid 2> /dev/null` 2> /dev/null || true
+# 可查看/etc/logrotate.d/下的配置文件
+endscript
+}
+“/var/log/httpd/access.log” /var/log/httpd/error.log {   #  指定多个文件, 如果有特殊字符需要用单引号
+rotate 5
+mail www@my.org
+size 100k        # 超过100k后切换日志, 并把老的日志发送邮件给www@my.org
+sharedscripts    # 共享脚本. 下面的postrotate脚本只运行一次.
+postrotate
+/usr/bin/killall -HUP httpd
+endscript
+}
+/var/log/news/* {    # 少用通配符, 因会它会包括已经切换过的日志, 要用的话最好在*号后加上扩展名, 如*.log
+monthly
+rotate 2
+olddir /var/log/news/old
+missingok
+postrotate
+kill -HUP ‘cat /var/run/inn.pid‘
+endscript
+nocompress
+}
+例：
+修改/etc/logrotate.conf
+/var/log/wtmp {
+monthly
+minsize 10k
+create 0664 a b
+rotate 2
+}
+logrotate -f /etc/logrotate.conf  –强制轮转
+logrotate -vf /etc/logrotate.conf    –再加一个-v参数查看轮转的过程
+———————————
+[root@kadefor log]# vim /etc/logrotate.d/syslog
+/var/log/messages /var/log/secure /var/log/maillog /var/log/spooler /var/log/boot.log /var/log/cron {
+sharedscripts   –表示切换时脚本只执行一次
+postrotate      –表示rotate后执行的脚本
+/bin/kill -HUP `cat /var/run/syslogd.pid 2> /dev/null` 2> /dev/null || true
+/bin/kill -HUP `cat /var/run/rsyslogd.pid 2> /dev/null` 2> /dev/null || true
+endscript       –表示脚本结束
+}
+[root@kadefor log]# logger -t ‘aaaa’ ‘bbbbbb’–在日志里加一个内容tag和内容
+[root@kadefor log]# tail /var/log/messages
+Jun 12 19:38:55 kadefor dhclient[3166]: bound to 192.168.1.101 — renewal in 3384 seconds.
+Jun 12 20:34:22 kadefor aaaa: bbbbb
