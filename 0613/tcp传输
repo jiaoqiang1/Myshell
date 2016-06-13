@@ -1,0 +1,22 @@
+Server端配置
+/etc/rsyslog.conf
+
+
+# Provides TCP syslog reception
+$ModLoad imtcp
+$InputTCPServerRun 514
+$AllowedSender TCP, 192.168.80.0/24
+
+# This one is the template to generate the log filename dynamically, depending on the client's IP address.          
+$template Remote,"/var/log/syslog/%fromhost-ip%/%fromhost-ip%_%$YEAR%-%$MONTH%-%$DAY%.log"
+
+# Log all messages to the dynamically formed file.
+:fromhost-ip, !isequal, "127.0.0.1" ?Remote
+& ~
+
+
+Client端配置
+/etc/rsyslog.conf
+*.*                     @@192.168.80.130
+/etc/init.d/rsyslog restart
+http://www.rsyslog.com/tag/tcp/
