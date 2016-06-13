@@ -20,3 +20,7 @@ Client端配置
 *.*                     @@192.168.80.130
 /etc/init.d/rsyslog restart
 http://www.rsyslog.com/tag/tcp/
+UDP 在主机名前加"@"
+TCP 在主机名前加"@@"
+RELP 在主机名前加":omrelp:"
+例： *.* @192.168.0.1 将所有日志信息通过UDP协议发送到192.168.0.1
