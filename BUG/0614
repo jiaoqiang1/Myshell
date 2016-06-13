@@ -1,0 +1,7 @@
+rsyslog stop/waiting
+rsyslog start/running, process 721
+root@ubuntu01:~# tail /var/log/boot
+tail: cannot open ‘/var/log/boot’ for reading: No such file or directory
+root@ubuntu01:~# tail /var/log/messages
+tail: cannot open ‘/var/log/messages’ for reading: No such file or directory
+root@ubuntu01:~# 
