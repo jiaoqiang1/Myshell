@@ -1,0 +1,213 @@
+如何对rsyslog进行配置
+作者:yinyin 返回首页
+Linux日志机制的核心是rsyslog守护进程，该服务负责监听Linux下的日志信息，并把日志信息追加到对应的日志文件中，一般在/var/log目录下。它还可以把日志信息通过网络协议发送到另一台Linux服务器上，或者将日志存储在MySQL或Oracle等数据库中。本文将简要介绍一下rsyslog的配置文件的配置，以及如何使用logrotate进行日志滚动。
+
+rsyslog 配置文件
+
+rsyslog的配置文件为/etc/rsyslog.conf和/etc/rsyslog.d/目录内的文件。 rsyslog.conf文件配置了rsyslog守护进程在哪里保存日志信息。
+
+rsyslog.conf配置文件主要包括以下几个部分：
+
+全局配置
+
+配置ryslog守护进程的全局属性，比如主信息队列大小（$MainMessageQueueSize），加载外部模块($ModLoad)等等。
+
+规则（选择器+动作）
+
+每个规则行由两部分组成，selector部分和action部分，这两部分由一个或多个空格或tab分隔，selector部分指定源和日志等级，action部分指定对应的操作。
+
+选择器 SELECTORS
+
+selector也由两部分组成，设施和优先级，由点号.分隔。第一部分为消息源或称为日志设施，第二部分为日志级别。 下面给出一个rsyslog.conf的例子：
+
+# rsyslog v5 configuration file
+...
+...
+# Include all config files in /etc/rsyslog.d/
+IncludeConfig /etc/rsyslog.d/*.conf
+
+#### RULES ####
+# Log all kernel messages to the console.
+# Logging much else clutters up the screen.
+#kern.*  /dev/console
+
+# Log anything (except mail) of level info or higher.
+# Don't log private authentication messages!
+*.info;mail.none;authpriv.none;cron.none                /var/log/messages
+
+# The authpriv file has restricted access.
+authpriv.*                                              /var/log/secure
+
+# Log all the mail messages in one place.
+mail.*                                                  -/var/log/maillog
+
+
+# Log cron stuff
+cron.*                                                  /var/log/cron
+
+# Everybody gets emergency messages
+*.emerg                                                 *
+
+# Save news errors of level crit and higher in a special file.
+uucp, news.crit                                          /var/log/spooler
+
+# Save boot messages als    o to boot.log
+local7.*                                                /var/log/boot.log
+...
+...
+日志设施有：
+
+auth(security), authpriv: 授权和安全相关的消息
+kern: 来自Linux内核的消息
+mail: 由mail子系统产生的消息
+cron: cron守护进程相关的信息
+daemon: 守护进程产生的信息
+news: 网络消息子系统
+lpr: 打印相关的日志信息
+user: 用户进程相关的信息
+local0 to local7: 保留，本地使用
+日志级别有(升序)：
+
+debug：包含详细的开发情报的信息，通常只在调试一个程序时使用。
+info：情报信息，正常的系统消息，比如骚扰报告，带宽数据等，不需要处理。
+notice： 不是错误情况，也不需要立即处理。
+warning： 警告信息，不是错误，比如系统磁盘使用了85%等。
+err：错误，不是非常紧急，在一定时间内修复即可。
+crit：重要情况，如硬盘错误，备用连接丢失。
+alert：应该被立即改正的问题，如系统数据库被破坏，ISP连接丢失。
+emerg：紧急情况，需要立即通知技术人员。
+思考下面的例子:
+
+cron.*  /var/log/cron
+把所有来自cron守护进程的消息保存到/var/log/cron文件中。 当指定日志级别时，所有等于或大于该日志等级的信息都要被处理。比如在下面的例子中，mail子系统所有warning及以上信息的日志都保存在/var/log/mail.warn文件中。
+
+mail.warn   /var/log/mail.warn
+使用=可以指定日志等级，比如我们只想保留info信息，可以使用下面的写法：
+
+mail.=info  /var/log/mail.info
+使用!可以排除这类信息，比如：
+
+mail.!info  /var/log/mail.info
+动作 ACTION
+
+action是规则描述的一部分，规则用于处理消息。总的来说，消息内容被写到一种日志文件上，但也可以执行其他动作，比如写到数据库表中或转发到其他主机。
+
+模板
+
+模板允许你指定日志信息的格式，可用于生成动态文件名，或在规则中使用。其定义如下所示，其中TEMPLATE_NAME是模板的名字,PROPERTY是rsyslog本身支持的一些属性参数。
+
+$template TEMPLATE_NAME,"text %PROPERTY% more text", [OPTION]
+下面给出一个模板定义及使用的例子：
+
+$template DynamicFile,"/var/log/test_logs/%timegenerated%-test.log"
+
+*.* ?DynamicFile
+输出频道
+
+输出频道为用户可能想要的输出类型提供了保护，在规则中使用前要先定义.其定义如下所示，其中NAME指定输出频道的名称，FILE_NAME指定输出文件，MAX_SIZE指定日志文件的大小，单位是bytes, ACTION指定日志文件到达MAX_SIZE时的操作。
+
+$outchannel NAME, FILE_NAME, MAX_SIZE, ACTION
+在规则中使用输出频道按照如下的格式：
+
+FILTER :omfile:$NAME
+下面给出使用输出频道的一个例子：
+
+$outchannel log_rotation, /var/log/test_log.log, 104857600, /home/joe/log_rotation_script
+
+*.* :omfile:$log_rotation
+转发到远程机器
+
+有3种方式转发消息：
+
+传统方式的UDP传输，有损耗
+基于TCP明文的传输，只在特定情况下丢失信息，并被广泛使用
+RELP传输，不会丢失信息，但只在rsyslogd 3.15.0及以上版本中可用
+写法：
+
+UDP 在主机名前加"@"
+TCP 在主机名前加"@@"
+RELP 在主机名前加":omrelp:"
+例： *.* @192.168.0.1 将所有日志信息通过UDP协议发送到192.168.0.1
+
+日志文件Rotating
+
+随着日志文件越来越大，这不仅会带来性能问题，同时对日志的管理也非常棘手。 当一个日志文件被rotated，会创建一个新的日志文件，同时旧的日志文件会被重命名。这些文件在一段时间内被保留，一旦产生一定数量的旧的日志，系统就会删除一部分旧的日志。
+
+logrotate配置文件
+
+logrotate的配置文件为/etc/logrotate.conf，下面给一个例子：
+
+# see "man logrotate" for details
+# rotate log files weekly
+weekly
+
+# keep 4 weeks worth of backlogs
+rotate 4
+
+# create new (empty) log files after rotating old ones
+create
+
+# uncomment this if you want your log files compressed
+#compress
+
+# packages drop log rotation information into this directory
+include /etc/logrotate.d
+
+# no packages own wtmp, or btmp -- we'll rotate them here
+/var/log/wtmp {
+    missingok
+    monthly
+    create 0664 root utmp
+    rotate 1
+}
+
+/var/log/btmp {
+    missingok
+    monthly
+    create 0660 root utmp
+    rotate 1
+}
+
+# system-specific logs may be configured here
+默认情况下，每周对日志文件进行一次rotate，并且保留4份旧日志。 这里wtmp和btmp有些例外，wtmp记录系统登录日志，btmp记录错误的登录尝试。这两个日志文件每月进行一次rotate。 自定义的log rotation配置文件在/etc/logrotate.d目录下。请看下面的例子：
+
+cat /etc/logrotate.d/rsyslog
+
+/var/log/syslog
+{
+    rotate 7
+    daily
+    missingok
+    notifempty
+    delaycompress
+    compress
+    postrotate
+        invoke-rc.d rsyslog reload > /dev/null
+    endscript
+}
+
+/var/log/mail.info
+/var/log/mail.warn
+/var/log/mail.err
+/var/log/mail.log
+/var/log/daemon.log
+/var/log/kern.log
+/var/log/auth.log
+/var/log/user.log
+/var/log/lpr.log
+/var/log/cron.log
+/var/log/debug
+/var/log/messages
+{
+    rotate 4
+    weekly
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        invoke-rc.d rsyslog reload > /dev/null
+    endscript
+}
+syslog的日志文件每天被rotated，保留7份旧的日志。其他的日志文件每周进行一次rotate，并保留4份旧的日志。
