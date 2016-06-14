@@ -1,0 +1,199 @@
+Save and exit the file.
+
+The first part of the line (.) means we want to send all messages. While it is outside the scope of this tutorial, you can configure rsyslog to send only certain messages. The remainder of the line explains how to send the data and where to send the data. In our case, the @ symbol before the IP address tells rsyslog to use UDP to send the messages. Change this to @@ to use TCP. This is followed by the private IP address of rsyslog-server with rsyslog and Logstash installed on it. The number after the colon is the port number to use.
+
+Restart rsyslog to enable the changes:
+
+sudo service rsyslog restart
+Congratulations! You are now sending your syslog messages to a centralized server!
+
+Tip: To validate your rsyslog configuration file, you can run the sudo rsyslogd -N1 command.
+
+Step 5 — Formatting the Log Data to JSON
+Elasticsearch requires that all documents it receives be in JSON format, and rsyslog provides a way to accomplish this by way of a template.
+
+In this step, we will configure our centralized rsyslog server to use a JSON template to format the log data before sending it to Logstash, which will then send it to Elasticsearch on a different server.
+
+Back on the rsyslog-server server, create a new configuration file to format the messages into JSON format before sending to Logstash:
+
+sudo nano /etc/rsyslog.d/01-json-template.conf
+Copy the following contents to the file exactly as shown:
+
+/etc/rsyslog.d/01-json-template.conf
+template(name="json-template"
+  type="list") {
+    constant(value="{")
+      constant(value="\"@timestamp\":\"")     property(name="timereported" dateFormat="rfc3339")
+      constant(value="\",\"@version\":\"1")
+      constant(value="\",\"message\":\"")     property(name="msg" format="json")
+      constant(value="\",\"sysloghost\":\"")  property(name="hostname")
+      constant(value="\",\"severity\":\"")    property(name="syslogseverity-text")
+      constant(value="\",\"facility\":\"")    property(name="syslogfacility-text")
+      constant(value="\",\"programname\":\"") property(name="programname")
+      constant(value="\",\"procid\":\"")      property(name="procid")
+    constant(value="\"}\n")
+}
+Other than the first and the last, notice that the lines produced by this template have a comma at the beginning of them. This is to maintain the JSON structure and help keep the file readable by lining everything up neatly. This template formats your messages in the way that Elasticsearch and Logstash expect to receive them. This is what they will look like:
+
+Example JSON message
+{
+  "@timestamp" : "2015-11-18T18:45:00Z",
+  "@version" : "1",
+  "message" : "Your syslog message here",
+  "sysloghost" : "hostname.example.com",
+  "severity" : "info",
+  "facility" : "daemon",
+  "programname" : "my_program",
+  "procid" : "1234"
+}
+Tip: The rsyslog.com docs show the variables available from rsyslog if you would like to custom the log data. However, you must send it in JSON format to Logstash and then to Elasticsearch.
+
+The data being sent is not using this format yet. The next step shows out to configure the server to use this template file.
+
+Step 6 — Configuring the Centralized Server to Send to Logstash
+Now that we have the template file that defines the proper JSON format, let's configure the centralized rsyslog server to send the data to Logstash, which is on the same Droplet for this tutorial.
+
+At startup, rsyslog will look through the files in /etc/rsyslog.d and create its configuration from them. Let's add our own configuration file to extended the configuration.
+
+On the rsyslog-server, create /etc/rsyslog.d/60-output.conf:
+
+sudo nano /etc/rsyslog.d/60-output.conf
+Copy the following lines to this file:
+
+/etc/rsyslog.d/60-output.conf
+# This line sends all lines to defined IP address at port 10514,
+# using the "json-template" format template
+
+*.*                         @private_ip_logstash:10514;json-template
+The *.* at the beginning means to process the remainder of the line for all log messages. The @ symbols means to use UDP (Use @@ to instead use TCP). The IP address or hostname after the @ is where to forward the messages. In our case, we are using the private IP address for rsyslog-server since the rsyslog centralized server and the Logstash server are installed on the same Droplet. This must match the private IP address you configure Logstash to listen on in the next step.
+
+The port number is next. This tutorial uses port 10514. Note that the Logstash server must listen on the same port using the same protocol. The last part is our template file that shows how to format the data before passing it along.
+
+Do not restart rsyslog yet. First, we have to configure Logstash to receive the messages.
+
+Step 7 — Configure Logstash to Receive JSON Messages
+In this step you will install Logstash, configure it to receive JSON messages from rsyslog, and configure it to send the JSON messages on to Elasticsearch.
+
+Logstash requires Java 7 or later. Use the instructions from Step 1 of the Elasticsearch tutorial to install Java 7 or 8 on the rsyslog-server Droplet.
+
+Next, install the security key for the Logstash repository:
+
+wget -qO - https://packages.elastic.co/GPG-KEY-elasticsearch | sudo apt-key add -
+Add the repository definition to your /etc/apt/sources.list file:
+
+echo "deb http://packages.elastic.co/logstash/2.3/debian stable main" | sudo tee -a /etc/apt/sources.list
+Note: Use the echo method described above to add the Logstash repository. Do not use add-apt-repository as it will add a deb-src entry as well, but Elastic does not provide a source package. This will result in an error when you attempt to run apt-get update.
+
+Update your package lists to include the Logstash repository:
+
+sudo apt-get update
+Finally, install Logstash:
+
+sudo apt-get install logstash
+Now that Logstash is installed, let's configure it to listen for messages from rsyslog.
+
+The default installation of Logstash looks for configuration files in /etc/logstash/conf.d. Edit the main configuration file:
+
+sudo nano /etc/logstash/conf.d/logstash.conf
+Then, add these lines to /etc/logstash/conf.d/logstash.conf:
+
+/etc/logstash/conf.d/logstash.conf`
+# This input block will listen on port 10514 for logs to come in.
+# host should be an IP on the Logstash server.
+# codec => "json" indicates that we expect the lines we're receiving to be in JSON format
+# type => "rsyslog" is an optional identifier to help identify messaging streams in the pipeline.
+
+input {
+  udp {
+    host => "logstash_private_ip"
+    port => 10514
+    codec => "json"
+    type => "rsyslog"
+  }
+}
+
+# This is an empty filter block.  You can later add other filters here to further process
+# your log lines
+
+filter { }
+
+# This output block will send all events of type "rsyslog" to Elasticsearch at the configured
+# host and port into daily indices of the pattern, "rsyslog-YYYY.MM.DD"
+
+output {
+  if [type] == "rsyslog" {
+    elasticsearch {
+      hosts => [ "elasticsearch_private_ip:9200" ]
+    }
+  }
+}
+The syslog protocol is UDP by definition, so this configuration mirrors that standard.
+
+In the input block, set the Logstash host address by replacing logstashprivateip with the private IP address of rsyslog-server, which also has Logstash installed on it.
+
+The input block configure Logstash to listen on port 10514 so it won't compete with syslog instances on the same machine. A port less than 1024 would require Logstash to be run as root, which is not a good security practice.
+
+Be sure to replace elasticsearchprivateip with the private IP address of your Elasticsearch Droplet. The output block shows a simple conditional configuration. Its object is to only allow matching events through. In this case, that is only events with a "type" of "rsyslog".
+
+Test your Logstash configuraiton changes:
+
+sudo service logstash configtest
+It should display Configuration OK if there are no syntax errors. Otherwise, try and read the error output to see what's wrong with your Logstash configuration.
+
+When all these steps are completed, you can start your Logstash instance by running:
+
+sudo service logstash start
+Also restart rsyslog on the same server since it has a Logstash instance to forward to now:
+
+sudo service rsyslog restart
+To verify that Logstash is listening on port 10514:
+
+netstat -na | grep 10514
+You should see something like this:
+
+Output of netstat
+udp6       0      0 10.128.33.68:10514     :::*  
+You will see the private IP address of rsyslog-server and the 10514 port number we are using to listen for rsyslog data.
+
+Tip: To troubleshoot Logstash, stop the service with sudo service logstash stop and run it in the foreground with verbose messages:
+
+/opt/logstash/bin/logstash -f /etc/logstash/conf.d/logstash.conf --verbose
+It will contain usual information such as verifying with IP address and UDP port Logstash is using:
+
+Starting UDP listener {:address=>"10.128.33.68:10514", :level=>:info}
+Step 8 — Verifying Elasticsearch Input
+Earlier, we configured Elasticsearch to listen on its private IP address. It should now be receiving messages from Logstash. In this step, we will verify that Elasticsearch is receiving the log data.
+
+The rsyslog-client and rsyslog-server Droplets should be sending all their log data to Logstash, which is then passed along to Elasticsearch. Let's generate a security message to verify that Elasticsearch is indeed receiving these messages.
+
+On rsyslog-client, execute the following command:
+
+sudo tail /var/log/auth.log
+You will see the security log on the local system at the end of the output. It will look similar to:
+
+Output of tail /var/log/auth.log
+May  2 16:43:15 rsyslog-client sudo:    sammy : TTY=pts/0 ; PWD=/etc/rsyslog.d ; USER=root ; COMMAND=/usr/bin/tail /var/log/auth.log
+May  2 16:43:15 rsyslog-client sudo: pam_unix(sudo:session): session opened for user root by sammy(uid=0)
+With a simple query, you can check Elasticsearch:
+
+Run the following command on the Elasticsearch server or any system that is allowed to access it. Replace elasticsearch_ip with the private IP address of the Elasticsearch server. This IP address must also be the one you configured Elasticsearch to listen on earlier in this tutorial.
+
+curl -XGET 'http://elasticsearch_ip:9200/_all/_search?q=*&pretty'
+In the output you will see something similar to the following:
+
+Output of curl
+{
+      "_index" : "logstash-2016.05.04",
+      "_type" : "rsyslog",
+      "_id" : "AVR8fpR-e6FP4Elp89Ww",
+      "_score" : 1.0,
+      "_source":{"@timestamp":"2016-05-04T15:59:10.000Z","@version":"1","message":"    sammy : TTY=pts/0 ; PWD=/home/sammy ; USER=root ; COMMAND=/usr/bin/tail /var/log/auth.log","sysloghost":"rsyslog-client","severity":"notice","facility":"authpriv","programname":"sudo","procid":"-","type":"rsyslog","host":"10.128.33.68"}
+    },
+Notice that the name of the Droplet that generated the rsyslog message is in the log (rsyslog-client).
+
+With this simple verification step, your centralized rsyslog setup is complete and fully operational!
+
+Conclusion
+Your logs are in Elasticsearch now. What's next? Consider reading up on what Kibana can do to visualize the data you have in Elasticsearch, including line and bar graphs, pie charts, maps, and more. How To Use Logstash and Kibana To Centralize Logs On Ubuntu 14.04 explains how to use Kibana web interface to search and visualize logs.
+
+Perhaps your data would be more valuable with further parsing and tokenization. If so, then learning more about Logstash will help you achieve that result.
