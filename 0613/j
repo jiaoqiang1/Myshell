@@ -1,0 +1,61 @@
+
+Rsyslog
+
+rsyslog可以理解为增强版的syslog，在syslog的基础上扩展了很多其他功能，如数据库支持(MySQL,PostgreSQL、Oracle等)、日志内容筛选、定义日志格式模板等。除了默认的udp协议外，rsyslog还支持tcp协议来接收日志，可以yum安装，也可以源码安装，下载地址：
+
+http://www.rsyslog.com/download/
+
+ 
+
+rsyslog功能很丰富，我只测了一部分，但这已经能够满足我的需求
+
+a.   mysql支持
+
+rsyslog很多功能都是以模块的形式实现的，比如这个mysql支持，首先在编译的时候我们必须将这个模块编译进去，然后在/etc/rsyslog.conf加载”$ModLoad ommysql“，然后在指定哪些日志需要存放在数据里。在使用mysql模块前，我们需要手工建库、定义表，这些步骤手册里都有详细说明，操作起来也不难。
+
+b.   filter(日志筛选)
+
+filter是rsyslog的一大亮点，通常情况下，我们并不是所有的日志都要收集，比如我们只需要error以下级别的日志、或者我们再要包含特定内容的日志。灵活运用filter我们可以很轻易地实现这些需求。下面举几个例子，使用方法手册里有详细介绍：
+
+1
+
+2
+	
+
+:msg, contains, "test_message"  /var/log/test.log
+
+&~
+
+如果日志内容包含”test_message”就存放在/var/log/test.log中，”&~”的意思是丢弃，不做后续处理。即使后面还有”:msg, contains,“test_message” /var/log/test2.log”，这条日志也不会再存在test2.log中。
+
+1
+
+2
+	
+
+if $msg contains 'test_message' then /var/log/test.log
+
+&~
+
+上面的例子的另一种写法，用if的好处是可以定义一些复杂的条件匹配
+filter非常的实用，syslog中仅仅定义的local0~local7几个用户自定义的facility。使用filter我们轻松解决自定义facility不够用的问题
+
+c.    template
+
+使用template定义日志格式模板，可以规范不通的类型的日志，很方便我们查看，使用起来也很简单，但是template的定义必须放在rsyslog.conf的顶端。
+
+1
+
+2
+	
+
+$template myFormat,"%timestamp%  %hostname%  %pri-text%  %msg%\n"
+
+$ActionFileDefaultTemplate myFormat
+
+第一行我们定义了一个名为myFormat的模板，第二行的意思是把我们定义的myFormat作为rsyslog的默认模板。如果只是需要在特定日志上套用这个模板可以这样写
+
+1
+	
+
+$template myFormat,"%timestamp%  %hostname%  %pri-text%  %msg%\n"
