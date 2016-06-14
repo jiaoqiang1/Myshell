@@ -1,0 +1,33 @@
+To enable these modules and servers, uncomment the lines so the file now contains:
+
+/etc/rsyslog.conf
+# provides UDP syslog reception
+$ModLoad imudp
+$UDPServerRun 514
+
+# provides TCP syslog reception
+$ModLoad imtcp
+$InputTCPServerRun 514
+Save and close the rsyslog configuration file.
+
+Restart rsyslog by running:
+
+sudo service rsyslog restart
+Your centralized rsyslog server is now configured to listen for messages from remote syslog (including rsyslog) instances.
+
+Tip: To validate your rsyslog configuration file, you can run the sudo rsyslogd -N1 command.
+
+Step 4 — Configuring rsyslog to Send Data Remotely
+In this section, we will configure the rsyslog-client to send log data to the ryslog-server Droplet we configured in the last step.
+
+In a default rsyslog setup on Ubuntu, you'll find two files in /etc/rsyslog.d:
+
+20-ufw.conf
+50-default.conf
+On the rsyslog-client, edit the default configuration file:
+
+sudo nano /etc/rsyslog.d/50-default.conf
+Add the following line at the top of the file before the log by facility section, replacing private_ip_of_ryslog_server with the private IP of your centralized server:
+
+/etc/rsyslog.d/50-default.conf
+*.*                         @private_ip_of_ryslog_server:514
