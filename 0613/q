@@ -1,0 +1,1415 @@
+CCIE Journey关注
+在CentOS上配置rsyslog为Cisco IOS提供日志服务的基本配置
+
+编辑/etc/rsyslog.conf文件并将下面两行的注释去掉（也就是把#符号去掉）：
+
+#$ModLoad imudp
+
+#$UDPServerRun 514
+
+
+在/etc/rsyslog.d/文件夹下创建一个新的配置文件，名字自定，这里我们将其命名为cisco.conf，向新建的文件中添加如下行：
+
+local4.notice                    /var/log/admin/cisco.log  
+
+
+Cisco IOS默认使用syslog facility local7(23)，由于在CentOS中local7已被使用所以这里我们改用local4(20)，这也是Cisco ASA中默认的syslog facility。
+
+关于rsyslog的配置这里就不再赘述了，请自行man rsyslog.conf。
+
+使用命令service rsyslog restart重启rsyslog服务。
+
+接下来需要添加防火墙规则以允许外部发送到rsyslog端口(514)的数据：
+
+iptables -I INPUT [rulenum] -p udp -m state --state NEW -m udp --dport 514 -j ACCEPT            #添加防火墙规则
+
+iptables-save > /etc/sysconfig/iptables       # 保存防火墙规则
+
+
+上面就是在CentOS上所需做的基本配置，下面我们继续Cisco IOS的配置。
+
+logging host x.x.x.x    # 指定syslog服务器地址
+
+logging trap notifications    # 指定日志级别
+
+logging facility local4    指定syslog facility type
+
+以上就是在CentOS中配置rsyslog为IOS提供日志服务的基本步骤。
+
+收起
+ciscolinuxrsyslog分享推荐
+喜欢
+tianxiamall
+打开新页
+tianxiamall关注
+rsyslog远程传输的几种方式
+
+Rsyslog是一个syslogd的多线程增强版，rsyslog vs. syslog-ng 链接是rsyslog官方和syslog特性和性能上的一些对比，目前大部分Linux发行版本默认也是使用rsyslog记录日志。这里介绍rsyslog远程传输的几种方式，对远程日志传输可以有一个了解。
+
+
+
+rsyslog提供三个远程日志传输方式：
+
+
+
+UDP: 数据包传输可信度不高
+
+TCP: 数据包传输可信度比较高
+
+RELP: 数据包传输可信度最高，避免数据丢失，比较新的协议，目前应用较少
+
+以下为man手册对RELP协议的一个介绍：
+
+
+
+RELP can be used instead of UDP or plain TCP syslog to provide reliable delivery of syslog messages. Please note that plain TCP syslog does NOT provide truly reliable delivery, with it messages may be lost when there is a connection problem or the server shuts down. RELP prevents message loss in hose cases.
+
+
+
+关于RELP的更进一步了解可以参考 Using TLS with RELP RELP Input Module RELP Output Module (omrelp)
+
+
+
+相关配置
+
+To forward messages to another host via UDP, prepend the hostname with the at sign (“@”). To forward it via plain tcp, prepend two at signs (“@@”). To forward via RELP, prepend the string “:omrelp:” in front of the hostname.
+
+
+
+UDP传输
+
+Server端配置
+
+/etc/rsyslog.conf
+
+# Provides UDP syslog reception
+
+$ModLoad imudp
+
+$UDPServerRun 514
+
+$AllowedSender UDP, 192.168.80.0/24
+
+
+
+# This one is the template to generate the log filename dynamically, depending on the client's IP address. 
+
+# 根据客户端的IP单独存放主机日志在不同目录，syslog需要手动创建             
+
+$template Remote,"/var/log/syslog/%fromhost-ip%/%fromhost-ip%_%$YEAR%-%$MONTH%-%$DAY%.log"
+
+
+
+# Log all messages to the dynamically formed file.
+
+:fromhost-ip, !isequal, "127.0.0.1" ?Remote
+
+# 排除本地主机IP日志记录，只记录远程主机日志
+
+# 注意此规则需要在其它规则之前，否则配置没有意义，远程主机的日志也会记录到Server的日志文件中
+
+& ~ # 忽略之前所有的日志，远程主机日志记录完之后不再继续往下记录
+
+或者把以上配置单独存放在/etc/rsyslog.d/中的xxx.conf配置文件中，尽量避免修改主配置文件，当然如果要独立文件主配置文件中必须含有以下配置
+
+# grep 'rsyslog.d' /etc/rsyslog.conf 
+
+# Include all config files in /etc/rsyslog.d/
+
+$IncludeConfig /etc/rsyslog.d/*.conf
+
+Client端配置
+
+/etc/rsyslog.conf
+
+*.*                     @192.168.80.130
+
+以上配置完成之后/etc/init.d/rsyslog restart
+
+
+
+TCP传输
+
+TCP配置和UDP类似，如下
+
+
+
+Server端配置
+
+/etc/rsyslog.conf
+
+# Provides TCP syslog reception
+
+$ModLoad imtcp
+
+$InputTCPServerRun 514
+
+$AllowedSender TCP, 192.168.80.0/24
+
+
+
+# This one is the template to generate the log filename dynamically, depending on the client's IP address.          
+
+$template Remote,"/var/log/syslog/%fromhost-ip%/%fromhost-ip%_%$YEAR%-%$MONTH%-%$DAY%.log"
+
+
+
+# Log all messages to the dynamically formed file.
+
+:fromhost-ip, !isequal, "127.0.0.1" ?Remote
+
+& ~
+
+Client端配置
+
+/etc/rsyslog.conf
+
+*.*                     @@192.168.80.130
+
+客户端和服务端重启相关服务即可
+
+
+
+关于TCP和UDP的传输方式，rsyslog官方推荐使用TCP传输方式
+
+
+
+In general, we suggest to use TCP syslog. It is way more reliable than UDP syslog and still pretty fast. The main reason is, that UDP might suffer of message loss. This happens when the syslog server must receive large bursts of messages. If the system buffer for UDP is full, all other messages will be dropped. With TCP, this will not happen. But sometimes it might be good to have a UDP server configured as well. That is, because some devices (like routers) are not able to send TCP syslog by design. In that case, you would need both syslog server types to have everything covered. If you need both syslog server types configured, please make sure they run on proper ports. By default UDP syslog is received on port 514. TCP syslog needs a different port because often the RPC service is using this port as well.
+
+
+
+RELP传输
+
+RELP需要安装rsyslog-relp相应模块
+
+
+
+# yum install rsyslog-relp -y
+
+Server端配置
+
+/etc/rsyslog.conf
+
+$ModLoad imrelp # 加载相应模块
+
+$InputRELPServerRun 20514 # 监听端口
+
+
+
+# This one is the template to generate the log filename dynamically, depending on the client's IP address.          
+
+$template Remote,"/var/log/syslog/%fromhost-ip%/%fromhost-ip%_%$YEAR%-%$MONTH%-%$DAY%.log"
+
+
+
+# Log all messages to the dynamically formed file.
+
+:fromhost-ip, !isequal, "127.0.0.1" ?Remote
+
+Client端配置
+
+/etc/rsyslog.conf
+
+$ActionQueueType LinkedList     # use asynchronous processing
+
+$ActionQueueFileName srvrfwd    # set file name, also enables disk mode
+
+$ActionResumeRetryCount -1      # infinite retries on insert failure
+
+$ActionQueueSaveOnShutdown on   # save in-memory data if rsyslog shuts down
+
+*.* :omrelp:192.168.80.130:20514
+
+客户端和服务端重启相关服务即可
+
+收起
+rsyslog分享推荐
+喜欢
+打开新页
+tianxiamall关注
+RSYSLOG服务实时传输日志配置
+
+一个项目中涉及到rsyslog的使用，配置。
+
+    简单介绍一下，就是读取本地一个文件，通过rsyslog实时传输到远端的服务器，然后使用rsyslog.receiver.php分拣处理。
+
+    看中的rsyslog自带完善的实传机制，可靠性还是不错，不过想要用的好还需要对各个瓶颈环节清楚才行。
+
+ 
+
+客户端
+$ModLoad immark # provides --MARK-- message capability
+
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+
+$ModLoad imklog # kernel logging (formerly provided by rklogd)
+
+$ModLoad lmregexp
+
+#$ModLoad omhdfs
+
+#$ModLoad imudp
+
+#$UDPServerRun 514
+
+$SystemLogRateLimitInterval 0
+
+ 
+
+# Log anything (except mail) of level info or higher.
+
+# Don't log private authentication messages!
+
+*.info;mail.none;authpriv.none;cron.none;local5.none;local6.none -/var/log/messages
+
+# The authpriv file has restricted access.
+
+authpriv.* -/var/log/secure
+
+# Log all the mail messages in one place.
+
+mail.* -/var/log/maillog
+
+# Log cron stuff
+
+cron.* -/var/log/cron
+
+# Everybody gets emergency messages
+
+*.emerg *
+
+# Save news errors of level crit and higher in a special file.
+
+uucp,news.crit -/var/log/spooler
+
+# Save boot messages also to boot.log
+
+local7.* /var/log/boot.log
+
+#real tran log
+
+$ModLoad imfile #装载imfile模块
+
+$InputFileName /data2/logs/ssologs.log #读取日志文件
+
+$InputFileTag login.sina.com.cn: #日志写入日志附加标签字符串
+
+$InputFileFacility local5 #日志类型
+
+$InputFileSeverity info #日志等级
+
+$InputFileStateFile ssologs.log_state #定义记录偏移量数据文件名
+
+$InputFilePollInterval 1 #检查日志文件间隔（秒）
+
+$InputFilePersistStateInterval 1 #回写偏移量数据到文件间隔时间（秒）
+
+$InputRunFileMonitor #激活读取，可以设置多组日志读取，每组结束时设置本参数。以示生效。
+
+#接收队列
+
+$WorkDirectory /data2/logs/ #定义工作目录。例如队列文件存储存储文件夹。
+
+$MainMsgQueueType LinkedList #选择使用内存队列模式。
+
+$MainMsgQueueFileName local5.main #如果队列模式使用内存模式，同时在配置这个参数，意味激活磁盘附加队列。
+
+$MainMsgQueueHighWatermark 10000 #当内存队列达到这些元素时，开始回写磁盘。
+
+$MainMsgQueueLowWatermark 1000 #当内存队列小于这些元素时，停止回写磁盘。
+
+$MainMsgQueueMaxDiskSpace 20g #限制磁盘队列大小，参数疑似20GByte。
+
+$MainMsgQueueMaxFileSize 200m #队列单文件尺寸大小。
+
+$MainMsgQueueSaveOnShutdown on #在rsyslogd关闭时，要保存队列中数据。
+
+$MainMsgQueueDiscardSeverity 8 #丢弃消息等级设定，数字越低丟的越多，设置8代表禁止丢弃消息。
+
+$MainMsgQueueDiscardMark 1000000000 #超出10亿后，会禁止新消息入队，丢弃消息。如果前一个被禁止， #那么丢弃数据将无针对性,如果
+
+$MainMsgQueueTimeoutEnqueue 3000 #超时3秒，TCP或local_socket方式下，预防资源夯住，引起崩溃。
+
+$MainMsgQueueDequeueBatchSize 500 #优化带宽，设置每批次传输元素量，尽可能每次传输更多的数据。
+
+#发送队列(可以部署多个)
+
+$ActionForwardDefaultTemplate RSYSLOG_ForwardFormat #定义转发消息格式模板，使用系统默认转发格式。
+
+$WorkDirectory /data2/logs/ #定义工作目录。例如队列文件存储存储文件夹。
+
+$ActionQueueType LinkedList #选择使用内存队列模式。
+
+$ActionQueueFileName local5.forward #如果队列模式使用内存模式，同时在配置这个参数，意味激活磁盘附加队列。
+
+$ActionQueueHighWatermark 10000 #当内存队列达到这些元素时，开始回写磁盘。
+
+$ActionQueueLowWatermark 1000 #当内存队列小于这些元素时，停止回写磁盘。
+
+$ActionQueueMaxDiskSpace 20g #限制磁盘队列大小，参数疑似20GByte。
+
+$ActionQueueMaxFileSize 200m #队列单文件尺寸大小。
+
+$ActionResumeRetryCount -1 #失败后重试次数，-1 代表无限。
+
+$ActionQueueSaveOnShutdown on #在rsyslogd关闭时，要保存队列中数据。
+
+$ActionQueueDiscardSeverity 8 #丢弃消息等级设定，数字越低丟的越多，设置8代表禁止丢弃消息。
+
+$ActionQueueDiscardMark 1000000000 #超出10亿后，会禁止新消息入队，丢弃消息。如果前一个被禁止，
+
+ #那么丢弃数据将无针对性,如果
+
+$ActionQueueTimeoutEnqueue 3000 #超时3秒，TCP或local_socket方式下，预防资源夯住，引起崩溃。
+
+$ActionQueueDequeueBatchSize 500 #优化带宽，设置每批次传输元素量，尽可能每次传输更多的数据。
+
+local5.* @@10.69.56.39;RSYSLOG_ForwardFormat #发送local5类型数据，以系统默认格式转发到目标服务器。
+
+2. 服务器端
+
+$ModLoad immark # provides --MARK-- message capability
+
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+
+$ModLoad imklog # kernel logging (formerly provided by rklogd)
+
+$ModLoad lmregexp
+
+$ModLoad omhdfs
+
+#$ModLoad imudp
+
+#$UDPServerRun 514
+
+ 
+
+ 
+
+*.info;mail.none;authpriv.none;cron.none;local5.none;local6.none -/var/log/messages
+
+# The authpriv file has restricted access.
+
+authpriv.* /var/log/secure
+
+# Log all the mail messages in one place.
+
+mail.* -/var/log/maillog
+
+ 
+
+# Log cron stuff
+
+cron.* -/var/log/cron
+
+# Everybody gets emergency messages
+
+*.emerg *
+
+# Save news errors of level crit and higher in a special file.
+
+uucp,news.crit -/var/log/spooler
+
+# Save boot messages also to boot.log
+
+local7.* /var/log/boot.log
+
+ 
+
+ 
+
+# ######### Receiving Messages from Remote Hosts ##########
+
+# TCP Syslog Server:
+
+# provides TCP syslog reception and GSS-API (if compiled to support it)
+
+$ModLoad imtcp.so # load module
+
+$InputTCPServerRun 514 # start up TCP listener at port 514
+
+$InputTCPMaxSessions 1000
+
+# UDP Syslog Server:
+
+#$ModLoad imudp.so # provides UDP syslog reception
+
+#$UDPServerRun 514 # start a UDP syslog server at standard port 514
+
+ 
+
+#接收队列
+
+$WorkDirectory /data2/logs/ #定义工作目录。例如队列文件存储存储文件夹。
+
+$MainMsgQueueType LinkedList #选择使用内存队列模式。
+
+$MainMsgQueueFileName local5.main #如果队列模式使用内存模式，同时在配置这个参数，意味激活磁盘附加队列。
+
+$MainMsgQueueHighWatermark 10000 #当内存队列达到这些元素时，开始回写磁盘。
+
+$MainMsgQueueLowWatermark 1000 #当内存队列小于这些元素时，停止回写磁盘。
+
+$MainMsgQueueMaxDiskSpace 20g #限制磁盘队列大小，参数疑似20GByte。
+
+$MainMsgQueueMaxFileSize 200m #队列单文件尺寸大小。
+
+$MainMsgQueueSaveOnShutdown on #在rsyslogd关闭时，要保存队列中数据。
+
+$MainMsgQueueDiscardSeverity 8 #丢弃消息等级设定，数字越低丟的越多，设置8代表禁止丢弃消息。
+
+$MainMsgQueueDiscardMark 1000000000 #超出10亿后，会禁止新消息入队，丢弃消息。如果前一个被禁止， #那么丢弃数据将无针对性,如果
+
+$MainMsgQueueTimeoutEnqueue 3000 #超时3秒，TCP或local_socket方式下，预防资源夯住，引起崩溃。
+
+$MainMsgQueueDequeueBatchSize 500 #优化带宽，设置每批次传输元素量，尽可能每次传输更多的数据。
+
+#发送队列(可以部署多个)
+
+$ActionForwardDefaultTemplate RSYSLOG_ForwardFormat #定义转发消息格式模板，使用系统默认转发格式。
+
+$WorkDirectory /data2/logs/ #定义工作目录。例如队列文件存储存储文件夹。
+
+$ActionQueueType LinkedList #选择使用内存队列模式。
+
+$ActionQueueFileName local5.forward #如果队列模式使用内存模式，同时在配置这个参数，意味激活磁盘附加队列。
+
+$ActionQueueHighWatermark 10000 #当内存队列达到这些元素时，开始回写磁盘。
+
+$ActionQueueLowWatermark 1000 #当内存队列小于这些元素时，停止回写磁盘。
+
+$ActionQueueMaxDiskSpace 20g #限制磁盘队列大小，参数疑似20GByte。
+
+$ActionQueueMaxFileSize 200m #队列单文件尺寸大小。
+
+$ActionResumeRetryCount -1 #失败后重试次数，-1 代表无限。
+
+$ActionQueueSaveOnShutdown on #在rsyslogd关闭时，要保存队列中数据。
+
+$ActionQueueDiscardSeverity 8 #丢弃消息等级设定，数字越低丟的越多，设置8代表禁止丢弃消息。
+
+$ActionQueueDiscardMark 1000000000 #超出10亿后，会禁止新消息入队，丢弃消息。如果前一个被禁止，
+
+ #那么丢弃数据将无针对性,如果
+
+$ActionQueueTimeoutEnqueue 3000 #超时3秒，TCP或local_socket方式下，预防资源夯住，引起崩溃。
+
+$ActionQueueDequeueBatchSize 500 #优化带宽，设置每批次传输元素量，尽可能每次传输更多的数据。
+
+$ModLoad omprog
+
+$template ssolog,"%fromhost-ip% %syslogtag% %msg%\n"
+
+$ActionOMProgBinary /etc/dAppCluster/rsyslog.receiver.php
+
+if $syslogfacility-text == 'local5' and $syslogtag startswith 'login.sina.com.cn' then :omprog:;ssolog
+
+local5.* /data1/logs/rsyslog/ssologs.log;ssolog
+
+ 
+
+收起
+rsyslog分享推荐
+喜欢
+打开新页
+tianxiamall关注
+rsyslog -2
+
+logstash通过rsyslog对nginx的日志收集和分析
+http://bbotte.blog.51cto.com/6205307/1613571 logstash&elasticsearch&kibana的安装和配置
+
+http://bbotte.blog.51cto.com/6205307/1614453   这一篇文章里面是以nginx打补丁的方式实现rsyslog把nginx的日志同步到logstash做分析，不过线上环境种种不一样，下面是把nginx的日志直接通过rsyslog同步到logstash服务器上，不用对nginx做更改，相对来说更简单明了。
+
+nginx服务器端
+
+nginx的配置文件不用改动，例子：
+
+[root@db2 ~]# grep -v ^.*# /usr/local/nginx/conf/nginx.conf|sed '/^$/d' worker_processes 1; events { worker_connections 1024; } http { include mime.types; default_type application/octet-stream; log_format main '$remote_addr - $remote_user [$time_local] "$request" ' '$status $body_bytes_sent "$http_referer" ' '"$http_user_agent" "$http_x_forwarded_for"'; sendfile on; keepalive_timeout 65; server { listen 80; server_name localhost; index index.html; root /var/www; access_log /var/log/nginx/access.log main; error_log /var/log/nginx/error.log; error_page 500 502 503 504 /50x.html; location = /50x.html { root html; } } }
+rsyslog的配置
+
+[root@db2 ~]# grep -v ^# /etc/rsyslog.conf|sed '/^$/d' $ModLoad imuxsock # provides support for local system logging (e.g. via logger command) $ModLoad imklog # provides kernel logging support (previously done by rklogd) $ModLoad imfile # Load the imfile input module $ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat $IncludeConfig /etc/rsyslog.d/*.conf *.info;mail.none;authpriv.none;cron.none /var/log/messages authpriv.* /var/log/secure mail.* -/var/log/maillog cron.* /var/log/cron *.emerg * uucp,news.crit /var/log/spooler local7.* /var/log/boot.log $InputFileName /var/log/nginx/error.log $InputFileTag kibana-nginx-errorlog: $InputFileStateFile state-kibana-nginx-errorlog $InputRunFileMonitor $InputFileName /var/log/nginx/access.log $InputFileTag kibana-nginx-accesslog: $InputFileStateFile state-kibana-nginx-accesslog $InputRunFileMonitor $InputFilePollInterval 10 if $programname == 'kibana-nginx-errorlog' then @192.168.10.1:514 if $programname == 'kibana-nginx-errorlog' then ~ if $programname == 'kibana-nginx-accesslog' then @192.168.10.1:514 if $programname == 'kibana-nginx-accesslog' then ~ *.* @192.168.10.1:514
+再把rsyslog服务重启
+
+[root@db2 ~]# service rsyslog restart Shutting down system logger: [ OK ] Starting system logger: [ OK ]
+现在nginx的日志，已经同步到logstash服务器的/var/log/messages，如下图
+
+
+
+
+
+#####################################
+
+
+
+客户端
+
+$ModLoad immark # provides --MARK-- message capability
+
+
+
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+
+
+
+$ModLoad imklog # kernel logging (formerly provided by rklogd)
+
+
+
+$ModLoad lmregexp
+
+
+
+#$ModLoad omhdfs
+
+
+
+#$ModLoad imudp
+
+
+
+#$UDPServerRun 514
+
+
+
+$SystemLogRateLimitInterval 0
+
+
+
+*.info;mail.none;authpriv.none; cron .none;local5.none;local6.none - /var/log/messages
+
+
+
+authpriv.* - /var/log/secure
+
+
+
+mail.* - /var/log/maillog
+
+
+
+# Log cron stuff
+
+
+
+cron .* - /var/log/cron
+
+
+
+# Everybody gets emergency messages
+
+
+
+*.emerg *
+
+uucp,news.crit - /var/log/spooler
+
+
+
+local7.* /var/log/boot .log
+
+
+
+#real tran log
+
+$ModLoad imfile #装载imfile模块
+
+
+
+$InputFileName /data2/logs/ssologs .log #读取日志文件
+
+
+
+$InputFileTag login.sina.com.cn: #日志写入日志附加标签字符串
+
+
+
+$InputFileFacility local5 #日志类型
+
+
+
+$InputFileSeverity info #日志等级
+
+
+
+$InputFileStateFile ssologs.log_state #定义记录偏移量数据文件名
+
+
+
+$InputFilePollInterval 1 #检查日志文件间隔（秒）
+
+
+
+$InputFilePersistStateInterval 1 #回写偏移量数据到文件间隔时间（秒）
+
+
+
+$InputRunFileMonitor #激活读取，可以设置多组日志读取，每组结束时设置本参数。以示生效。
+
+
+
+#接收队列
+
+$WorkDirectory /data2/logs/ #定义工作目录。例如队列文件存储存储文件夹。
+
+
+
+$MainMsgQueueType LinkedList #选择使用内存队列模式。
+
+
+
+$MainMsgQueueFileName local5.main #如果队列模式使用内存模式，同时在配置这个参数，意味激活磁盘附加队列。
+
+
+
+$MainMsgQueueHighWatermark 10000 #当内存队列达到这些元素时，开始回写磁盘。
+
+
+
+$MainMsgQueueLowWatermark 1000 #当内存队列小于这些元素时，停止回写磁盘。
+
+
+
+$MainMsgQueueMaxDiskSpace 20g #限制磁盘队列大小，参数疑似20GByte。
+
+
+
+$MainMsgQueueMaxFileSize 200m #队列单文件尺寸大小。
+
+
+
+$MainMsgQueueSaveOnShutdown on #在rsyslogd关闭时，要保存队列中数据。
+
+
+
+$MainMsgQueueDiscardSeverity 8 #丢弃消息等级设定，数字越低丟的越多，设置8代表禁止丢弃消息。
+
+
+
+$MainMsgQueueDiscardMark 1000000000 #超出10亿后，会禁止新消息入队，丢弃消息。如果前一个被禁止， #那么丢弃数据将无针对性,如果
+
+
+
+$MainMsgQueueTimeoutEnqueue 3000 #超时3秒，TCP或local_socket方式下，预防资源夯住，引起崩溃。
+
+
+
+$MainMsgQueueDequeueBatchSize 500 #优化带宽，设置每批次传输元素量，尽可能每次传输更多的数据。
+
+
+
+#发送队列(可以部署多个)
+
+
+
+$ActionForwardDefaultTemplate RSYSLOG_ForwardFormat #定义转发消息格式模板，使用系统默认转发格式。
+
+
+
+$WorkDirectory /data2/logs/ #定义工作目录。例如队列文件存储存储文件夹。
+
+
+
+$ActionQueueType LinkedList #选择使用内存队列模式。
+
+
+
+$ActionQueueFileName local5.forward #如果队列模式使用内存模式，同时在配置这个参数，意味激活磁盘附加队列。
+
+
+
+$ActionQueueHighWatermark 10000 #当内存队列达到这些元素时，开始回写磁盘。
+
+
+
+$ActionQueueLowWatermark 1000 #当内存队列小于这些元素时，停止回写磁盘。
+
+
+
+$ActionQueueMaxDiskSpace 20g #限制磁盘队列大小，参数疑似20GByte。
+
+
+
+$ActionQueueMaxFileSize 200m #队列单文件尺寸大小。
+
+
+
+$ActionResumeRetryCount -1 #失败后重试次数，-1 代表无限。
+
+
+
+$ActionQueueSaveOnShutdown on #在rsyslogd关闭时，要保存队列中数据。
+
+
+
+$ActionQueueDiscardSeverity 8 #丢弃消息等级设定，数字越低丟的越多，设置8代表禁止丢弃消息。
+
+
+
+$ActionQueueDiscardMark 1000000000 #超出10亿后，会禁止新消息入队，丢弃消息。如果前一个被禁止，
+
+
+
+  #那么丢弃数据将无针对性,如果
+
+
+
+$ActionQueueTimeoutEnqueue 3000 #超时3秒，TCP或local_socket方式下，预防资源夯住，引起崩溃。
+
+
+
+$ActionQueueDequeueBatchSize 500 #优化带宽，设置每批次传输元素量，尽可能每次传输更多的数据。
+
+
+
+local5.* @@10.69.56.39;RSYSLOG_ForwardFormat #发送local5类型数据，以系统默认格式转发到目标服务器。
+
+
+
+2. 服务器端
+
+
+
+$ModLoad immark # provides --MARK-- message capability
+
+
+
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+
+
+
+$ModLoad imklog # kernel logging (formerly provided by rklogd)
+
+
+
+$ModLoad lmregexp
+
+
+
+$ModLoad omhdfs
+
+
+
+#$ModLoad imudp
+
+
+
+#$UDPServerRun 514
+
+
+
+*.info;mail.none;authpriv.none; cron .none;local5.none;local6.none - /var/log/messages
+
+
+
+authpriv.* /var/log/secure
+
+
+
+mail.* - /var/log/maillog
+
+
+
+# Log cron stuff
+
+
+
+cron .* - /var/log/cron
+
+
+
+# Everybody gets emergency messages
+
+
+
+*.emerg *
+
+uucp,news.crit - /var/log/spooler
+
+
+
+local7.* /var/log/boot .log
+
+
+
+# TCP Syslog Server:
+
+
+
+$ModLoad imtcp.so # load module
+
+
+
+$InputTCPServerRun 514 # start up TCP listener at port 514
+
+
+
+$InputTCPMaxSessions 1000
+
+
+
+# UDP Syslog Server:
+
+
+
+#接收队列
+
+$WorkDirectory /data2/logs/ #定义工作目录。例如队列文件存储存储文件夹。
+
+
+
+$MainMsgQueueType LinkedList #选择使用内存队列模式。
+
+
+
+$MainMsgQueueFileName local5.main #如果队列模式使用内存模式，同时在配置这个参数，意味激活磁盘附加队列。
+
+
+
+$MainMsgQueueHighWatermark 10000 #当内存队列达到这些元素时，开始回写磁盘。
+
+
+
+$MainMsgQueueLowWatermark 1000 #当内存队列小于这些元素时，停止回写磁盘。
+
+
+
+$MainMsgQueueMaxDiskSpace 20g #限制磁盘队列大小，参数疑似20GByte。
+
+
+
+$MainMsgQueueMaxFileSize 200m #队列单文件尺寸大小。
+
+
+
+$MainMsgQueueSaveOnShutdown on #在rsyslogd关闭时，要保存队列中数据。
+
+
+
+$MainMsgQueueDiscardSeverity 8 #丢弃消息等级设定，数字越低丟的越多，设置8代表禁止丢弃消息。
+
+
+
+$MainMsgQueueDiscardMark 1000000000 #超出10亿后，会禁止新消息入队，丢弃消息。如果前一个被禁止， #那么丢弃数据将无针对性,如果
+
+
+
+$MainMsgQueueTimeoutEnqueue 3000 #超时3秒，TCP或local_socket方式下，预防资源夯住，引起崩溃。
+
+
+
+$MainMsgQueueDequeueBatchSize 500 #优化带宽，设置每批次传输元素量，尽可能每次传输更多的数据。
+
+
+
+#发送队列(可以部署多个)
+
+
+
+$ActionForwardDefaultTemplate RSYSLOG_ForwardFormat #定义转发消息格式模板，使用系统默认转发格式。
+
+
+
+$WorkDirectory /data2/logs/ #定义工作目录。例如队列文件存储存储文件夹。
+
+
+
+$ActionQueueType LinkedList #选择使用内存队列模式。
+
+
+
+$ActionQueueFileName local5.forward #如果队列模式使用内存模式，同时在配置这个参数，意味激活磁盘附加队列。
+
+
+
+$ActionQueueHighWatermark 10000 #当内存队列达到这些元素时，开始回写磁盘。
+
+
+
+$ActionQueueLowWatermark 1000 #当内存队列小于这些元素时，停止回写磁盘。
+
+
+
+$ActionQueueMaxDiskSpace 20g #限制磁盘队列大小，参数疑似20GByte。
+
+
+
+$ActionQueueMaxFileSize 200m #队列单文件尺寸大小。
+
+
+
+$ActionResumeRetryCount -1 #失败后重试次数，-1 代表无限。
+
+
+
+$ActionQueueSaveOnShutdown on #在rsyslogd关闭时，要保存队列中数据。
+
+
+
+$ActionQueueDiscardSeverity 8 #丢弃消息等级设定，数字越低丟的越多，设置8代表禁止丢弃消息。
+
+
+
+$ActionQueueDiscardMark 1000000000 #超出10亿后，会禁止新消息入队，丢弃消息。如果前一个被禁止，
+
+
+
+  #那么丢弃数据将无针对性,如果
+
+
+
+$ActionQueueTimeoutEnqueue 3000 #超时3秒，TCP或local_socket方式下，预防资源夯住，引起崩溃。
+
+
+
+$ActionQueueDequeueBatchSize 500 #优化带宽，设置每批次传输元素量，尽可能每次传输更多的数据。
+
+
+
+$ModLoad omprog
+
+
+
+$template ssolog, "%fromhost-ip% %syslogtag% %msg%\n"
+
+
+
+$ActionOMProgBinary /etc/dAppCluster/rsyslog .receiver.php
+
+
+
+if $syslogfacility-text == 'local5' and $syslogtag startswith 'login.sina.com.cn' then :omprog:;ssolog
+
+
+
+local5.* /data1/logs/rsyslog/ssologs .log;ssolog
+
+收起
+rsyslog分享推荐
+喜欢
+打开新页
+tianxiamall关注
+rsyslog集中日志服务器
+
+基于主机的管理一般需要收集服务器的日志信息用于及时发现错误，处理故障。搭建linux下的集中日志服务器的程序一般可以用syslog,rsyslog,syslog-ng,还有scribe和fluentd等。
+
+基本每一种方式都是服务器端和客户端的模式。
+
+一般syslog,syslog-ng,rsyslog用于收集系统日志，scribe和fluentd用于收集业务日志，rsyslog和syslog-ng也可以收集业务日志，并可定制和过滤、筛选。
+
+LogAnalyzer和LogZilla是分析系统日志，并用web界面展示的的工具，一般只用在syslog,syslog-ng,rsyslog日志系统中。
+
+如下是基于Centos5的rsyslog+mysql+phplogcon的安装，安装前确认安装有EPEL源。
+
+安装rsyslog以及rsyslog-mysql接口支持
+
+1
+
+yum install rsyslog rsyslog-mysql
+
+ 
+
+ 
+
+安装数据库
+
+1
+
+2
+
+3
+
+yum install mysql-server
+
+yum install httpd php php-mysyql php-gd
+
+service mysqld status || service mysqld start
+
+创建rsyslog写入数据需要的库文件，路径可能根据版本有所不同
+mysql < /usr/share/doc/rsyslog-mysql-2.0.8/createDB.sql 创建账户和密码(确保一致/etc/rsyslog.conf and /path/top/phplogcon/config.php ) 
+
+01
+
+02
+
+03
+
+04
+
+05
+
+06
+
+07
+
+08
+
+09
+
+10
+
+11
+
+12
+
+13
+
+14
+
+15
+
+mysql> grant all on Syslog.* to syslog@localhost identified by 'mypass';
+
+mysql> flush privileges ;
+
+ 
+
+vi /etc/rsyslog.conf
+
+# Log to Mysql Settings
+
+$ModLoad ommysql
+
+*.* :ommysql:localhost,Syslog,syslog,phplogcon
+
+#Standard Redhat syslog settings
+
+*.info;mail.none;authpriv.none;cron.none /var/log/messages
+
+authpriv.* /var/log/secure
+
+mail.* -/var/log/maillog
+
+cron.* /var/log/cron
+
+*.emerg *
+
+uucp,news.crit /var/log/spooler
+
+local7.* /var/log/boot.log
+
+启动rsyslog:
+
+1
+
+2
+
+service syslog stop
+
+service rsyslog start
+
+如果有如下报错信息
+Feb 23 23:43:30 mon rsyslogd:could not load module ‘/usr/lib/rsyslog/ommysql’, dlopen: /usr/lib/rsyslog/ommysql: cannot open shared object file: No such file or directory
+
+请尝试软连接
+fix fast with:
+ln -s /usr/lib/rsyslog/ommysql.so /usr/lib/rsyslog/ommysql
+
+开机启动rsyslog，并关闭syslog的开机启动：
+chkconfig syslog off
+chkconfig rsyslog on
+
+开启接收远程信息：
+edit /etc/sysconfig/rsyslog with option -r:
+修改成：SYSLOGD_OPTIONS=”-m 0 -r”
+默认开启UDP 514端口，请确保防火墙没有阻止。
+
+以下是PHPLOGCON的安装
+到网址下载最新版本，http://www.phplogcon.org/
+新版本已更名为LogAnalyzer
+
+安装如下方式安装
+tar -zxvf phplogcon-2.8.1.tar.gz
+cd phplogcon-2.8.1
+mkdir /var/www/html/syslog
+cp -a src/* /var/www/html/syslog
+cd /var/www/html/syslog
+chmod 666 config.php
+
+打开浏览器输入: http://yourserver/syslog/
+按照提示操作
+安装好后，请做如下操作，以防止被修改。
+chmod 644 config.php
+
+客户端发送日志
+
+以Centos为例，不需要安装其他日志程序，直接修改/etc/syslog.conf，在最后一行下面加入：
+
+/var/log/messages @rsyslog_IP
+
+保存，重启service syslog restart
+
+查看phplogcon界面是否有客户端的日志出现。
+
+ 
+
+ 
+
+rsyslog.conf
+
+ 
+
+# rsyslog v5 configuration file
+
+ 
+
+# For more information see /usr/share/doc/rsyslog-*/rsyslog_conf.html
+
+# If you experience problems, see http://www.rsyslog.com/doc/troubleshoot.html
+
+ 
+
+#### MODULES ####
+
+ 
+
+$ModLoad imklog   # provides kernel logging support (previously done by rklogd)
+
+# rsyslog v5 configuration file
+
+ 
+
+# For more information see /usr/share/doc/rsyslog-*/rsyslog_conf.html
+
+# If you experience problems, see http://www.rsyslog.com/doc/troubleshoot.html
+
+ 
+
+#### MODULES ####
+
+ 
+
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+
+$ModLoad imklog   # provides kernel logging support (previously done by rklogd)
+
+#$ModLoad immark  # provides --MARK-- message capability
+
+ 
+
+# Provides UDP syslog reception
+
+#$ModLoad imudp
+
+#$UDPServerRun 514
+
+ 
+
+# Provides TCP syslog reception
+
+#$ModLoad imtcp
+
+#$InputTCPServerRun 514
+
+ 
+
+ 
+
+#### GLOBAL DIRECTIVES ####
+
+ 
+
+# Use default timestamp format
+
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+
+ 
+
+# File syncing capability is disabled by default. This feature is usually not required,
+
+# not useful and an extreme performance hit
+
+#$ActionFileEnableSync on
+
+ 
+
+# Include all config files in /etc/rsyslog.d/
+
+$IncludeConfig /etc/rsyslog.d/*.conf
+
+ 
+
+ 
+
+#### RULES ####
+
+ 
+
+# Log all kernel messages to the console.
+
+# Logging much else clutters up the screen.
+
+#kern.*                                                 /dev/console
+
+ 
+
+# Log anything (except mail) of level info or higher.
+
+# Don't log private authentication messages!
+
+*.info;mail.none;authpriv.none;cron.none                /var/log/messages
+
+ 
+
+# The authpriv file has restricted access.
+
+# rsyslog v5 configuration file
+
+ 
+
+# For more information see /usr/share/doc/rsyslog-*/rsyslog_conf.html
+
+# If you experience problems, see http://www.rsyslog.com/doc/troubleshoot.html
+
+ 
+
+#### MODULES ####
+
+ 
+
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+
+$ModLoad imklog   # provides kernel logging support (previously done by rklogd)
+
+#$ModLoad immark  # provides --MARK-- message capability
+
+ 
+
+# Provides UDP syslog reception
+
+#$ModLoad imudp
+
+#$UDPServerRun 514
+
+ 
+
+# Provides TCP syslog reception
+
+#$ModLoad imtcp
+
+#$InputTCPServerRun 514
+
+ 
+
+ 
+
+#### GLOBAL DIRECTIVES ####
+
+ 
+
+# Use default timestamp format
+
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+
+ 
+
+# File syncing capability is disabled by default. This feature is usually not required,
+
+# not useful and an extreme performance hit
+
+#$ActionFileEnableSync on
+
+ 
+
+# Include all config files in /etc/rsyslog.d/
+
+$IncludeConfig /etc/rsyslog.d/*.conf
+
+ 
+
+ 
+
+#### RULES ####
+
+ 
+
+# Log all kernel messages to the console.
+
+# Logging much else clutters up the screen.
+
+#kern.*                                                 /dev/console
+
+ 
+
+# Log anything (except mail) of level info or higher.
+
+# Don't log private authentication messages!
+
+*.info;mail.none;authpriv.none;cron.none                /var/log/messages
+
+ 
+
+# The authpriv file has restricted access.
+
+authpriv.*                                              /var/log/secure
+
+ 
+
+# Log all the mail messages in one place.
+
+mail.*                                                  -/var/log/maillog
+
+ 
+
+ 
+
+# Log cron stuff
+
+cron.*                                                  /var/log/cron
+
+ 
+
+# Everybody gets emergency messages
+
+*.emerg                                                 *
+
+ 
+
+# Save news errors of level crit and higher in a special file.
+
+uucp,news.crit                                          /var/log/spooler
+
+ 
+
+# Save boot messages also to boot.log
+
+local7.*                                                /var/log/boot.log
+
+ 
+
+ 
+
+# ### begin forwarding rule ###
+
+# The statement between the begin ... end define a SINGLE forwarding
+
+# rule. They belong together, do NOT split them. If you create multiple
+
+# forwarding rules, duplicate the whole block!
+
+# Remote Logging (we use TCP for reliable delivery)
+
+#
+
+# An on-disk queue is created for this action. If the remote host is
+
+# down, messages are spooled to disk and sent when it is up again.
+
+#$WorkDirectory /var/lib/rsyslog # where to place spool files
+
+#$ActionQueueFileName fwdRule1 # unique name prefix for spool files
+
+#$ActionQueueMaxDiskSpace 1g   # 1gb space limit (use as much as possible)
+
+#$ActionQueueSaveOnShutdown on # save messages to disk on shutdown
+
+#$ActionQueueType LinkedList   # run asynchronously
+
+#$ActionResumeRetryCount -1    # infinite retries if host is down
+
+# remote host is: name/ip:port, e.g. 192.168.0.1:514, port optional
+
+#*.* @@remote-host:514
+
+# ### end of the forwarding rule ###
+
+收起
