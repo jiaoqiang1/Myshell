@@ -1,0 +1,36 @@
+By default, there is an instance of rsyslog that runs inside every new Ubuntu installation. The rsyslog tool takes care of receiving all the log message from the kernel and operating system applications and distributing them over files in /var/log.
+
+However, rsyslog can do much more than that which includes logging into a remote server. This can be extremely useful for aggregating logs across a large fleet of servers or when it is not possible to write logs on disk.
+
+In this tutorial, we’re going to install rsyslog on a remote machine so we can ship logs to, redirect all logging to that remote server.
+
+Installing rsyslog on Remote Server
+You will need a copy of rsyslog running on a remote machine which will be recieving the logs from your existing server. It’s best that you have this in a remote location. The reason being that if this server crashes at the same time as your server crashes, you won’t be able to get any logs to troubleshoot any issues.
+
+Assuming that you’re using Ubuntu on the remote machine, you’ll already be running rsyslog. If not, you can install it by following the instructions provided inside the rsyslog website.
+
+Once it’s installed, you will need to make sure that it listens on a port which we will send logs to. The default port is 514 which we’ll keep. You will need to edit the file /etc/rsyslog.conf and uncomment the following lines:
+
+# provides UDP syslog reception
+#$ModLoad imudp
+#$UDPServerRun 514
+
+# provides TCP syslog reception
+#$ModLoad imtcp
+#$InputTCPServerRun 514
+After uncommenting the lines, it should look like the following:
+
+# provides UDP syslog reception
+$ModLoad imudp
+$UDPServerRun 514
+
+# provides TCP syslog reception
+$ModLoad imtcp
+$InputTCPServerRun 514
+Once that’s done, you can now restart the rsyslog service by running the command service rsyslog restart. Your rsyslog instance is now ready to recieve logs from remote hosts.
+
+Setting Up rsyslog on Local Server
+This process is extremely easy. All you need to do is tell the existing rsyslog instance on your server to ship logs to your remote server. It’s as easy as creating a file inside the /etc/rsyslog.d folder called 10-rsyslog.conf. Inside that file, all you need to put is
+
+*.*   @remote.server:514
+Once you write that file, restart the rsyslog service by running service rsyslog restart and your logs will now start being shipped to your remote server. You can verify that by logging into the remote server and checking the log folder, you’ll find that you now have logs labeled with the hostname of the client server.
