@@ -1,0 +1,123 @@
+
+syslog是Linux系统默认的日志守护进程。默认的syslog配置文件是/etc/syslog.conf文件。程序，守护进程和内核提供了访问系统的日志信息。因此，任何希望生成日志信息的程序都可以向 syslog 接口呼叫生成该信息。
+
+而rsyslog作为syslog的代替，功能多，性能好。
+
+rsyslog的新功能：
+rsyslog是一个加强版的syslog，具有各种各样的新功能，典型的有：
+    1、直接将日志写入到数据库。
+
+    2、日志队列（内存队列和磁盘队列）。
+
+    3、灵活的模板机制，可以得到多种输出格式。
+
+    4、插件式结构，多种多样的输入、输出模块。
+
+    5、可以把日志存放在Mysql ，PostgreSQL，Oracle等数据库中
+
+PS：好吧以上内容其实都是大部分引用了别人的blog对rsyslog介绍，这边我主要讲下如何快速使用rsyslog及收集history日志。
+
+部署环境
+
+系统：Centos 6.4 X86_64
+
+应用：rsyslogd 5.8.10
+
+rsyslog服务端
+
+    IP：10.1.4.180
+
+rsyslog客户端
+
+    IP：10.1.4.181
+
+部署及配置
+
+rsyslog部署
+因系统自带rsyslog所以不需要安装，如果系统没带的话且能上网，则直接yum install rsyslog -y安装。
+
+server端rsyslog.conf配置
+
+vim /etc/rsyslog.conf
+
+去掉以下项注释
+
+1
+2
+3
+4
+5
+6
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+$ModLoad imklog   # provides kernel logging support (previously done by rklogd)
+$ModLoad imudp            #开启支持upd的模块
+$UDPServerRun 514         #允许接收udp 514的端口传来的日志
+ModLoad imtcp             #开启支持tcp的模块
+$InputTCPServerRun 514    #允许接收tcp 514的端口传来的日志
+在最后添加以下行
+
+1
+local5.* /var/log/history.log  #将local类型5的日志存放到/var/log/history.log下
+或在最后添加以下行
+
+1
+2
+$template HistoryiLogFile, "/var/log/history/%HOSTNAME%.log" #以主机名为日志模板，模板名称为HistoryiLogFile
+if $syslogfacility-text == 'local5' then -?HistoryiLogFile #接收local类型5的日志
+重启rsyslog
+
+service rsyslog restart
+
+client端配置
+
+vim /etc/rsyslog.conf
+
+在最后添加以下行
+
+1
+local5.*  @10.1.4.180 #local类型5的日志通过UDP传输给10.1.4.180
+vim /etc/bashrc
+
+在最后添加
+
+用来实时输出history日志
+
+1
+2
+3
+4
+5
+HISTFILESIZE=2000
+HISTSIZE=2000
+HISTTIMEFORMAT="%Y%m%d-%H%M%S: "
+export HISTTIMEFORMAT
+export PROMPT_COMMAND='{ command=$(history 1 | { read x y; echo $y; }); logger -p local5.notice -t bash -i "user=$USER,ppid=$PPID,from=$SSH_CLIENT,pwd=$PWD,command:$command"; }'
+然后使其生效
+
+source /etc/bashrc
+
+重启rsyslog
+
+service rsyslog restart
+
+在server端tail -f var/log/history.log然后在客户端随便执行一条命令，观察server端是否有history日志生成。
+
+小记：
+
+   由于学习马哥视频的进度较慢，所以暂时先上一篇之前做的东西做为blog开篇，顺便吐槽下blog编辑样式问题，不知道为什么辛辛苦苦编辑的样式最后生成的就是一坨shit，跟我自己编辑的完全不一样，而且保存草稿就会更改样式，试过N遍都不行，，算了就酱~
+
+参考文档
+
+搭建
+
+    http://showerlee.blog.51cto.com/2047005/1231160
+
+    http://litaotao.blog.51cto.com/6224470/1283871
+
+配置
+
+    http://my.oschina.net/duxuefeng/blog/317570
+
+    http://www.linuxyw.com/a/yunweijingyan/xitongguanli/20130529/492.html
+
+    http://blog.carlos-spitzer.com/2013/03/21/how-to-record-users-activity-in-the-whole-system-and-centralize-logs-with-rsyslog/
