@@ -1,0 +1,55 @@
+Nginx日志配置远程Syslog采集
+本文将指引你：如何对Nginx日志进行采集，并通过Syslog协议，自动实时的发送到远程的集中日志分析中心，便于集中式的日志存储和管理，提高网站的运维效率。
+
+第一步：初始化日志采集环境
+
+先确保系统中的/var/spool/rsyslog 目录已存在：
+
+mkdir -v /var/spool/rsyslog
+if [ "$(grep Ubuntu /etc/issue)" != "" ]; then
+  chown -R syslog:adm /var/spool/rsyslog
+fi
+第二步：创建Nginx日志文件采集配置
+
+新建Rsyslog的子配置文件，他通常在/etc/rsyslog.d下，需要/etc/rsyslog.conf去包含这个目录下的子配置文件：
+
+vim /etc/rsyslog.d/nginx-biglog.conf
+复制以下内容到nginx-biglog.conf，注意注释部分的修改：
+
+$ModLoad imfile
+$InputFilePollInterval 10
+$WorkDirectory /var/spool/rsyslog
+$PrivDropToGroup adm
+
+## Nginx访问日志文件路径，根据实际情况修改:
+$InputFileName /usr/local/nginx/logs/access.log
+$InputFileTag nginx-access:
+$InputFileStateFile stat-nginx-access
+$InputFileSeverity info
+$InputFilePersistStateInterval 25000
+$InputRunFileMonitor
+
+## Nginx错误日志文件路径，根据实际情况修改:
+$InputFileName /usr/local/nginx/logs/error.log
+$InputFileTag nginx-error:
+$InputFileStateFile stat-nginx-error
+$InputFileSeverity error
+$InputFilePersistStateInterval 25000
+$InputRunFileMonitor
+
+## 指定日志格式模板：
+$template BiglogFormatNginx,"%msg%\n"
+
+## 注意syslog日志服务器接收地址，根据实际情况修改：
+if $programname == 'nginx-access' then @10.x.x.x:514;BiglogFormatNginx
+if $programname == 'nginx-access' then ~
+if $programname == 'nginx-error' then @10.x.x.x:514;BiglogFormatNginx
+if $programname == 'nginx-error' then ~
+注：通过Rsyslog配置日志接收端的时候，如上示例@10.x.x.x:514，用于指定接收日志的服务器的协议、IP地址和端口号。使用@代表走UDP协议，使用@@代表走TCP协议，冒号后面的514代表接收端口。
+
+第三步：重启Rsyslog服务，日志采集开始工作
+
+service rsyslog restart
+此时可以通过观察系统中的Rsyslog日志，确定是否正常工作。
+
+cat /var/log/messages |grep rsyslog
